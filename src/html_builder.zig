@@ -1,7 +1,5 @@
 const std = @import("std");
-const mem = std.mem;
-const fmt = std.fmt;
-var allocator: *const mem.Allocator = undefined;
+var allocator: *const std.mem.Allocator = undefined;
 
 const Attr = struct {
     key: []const u8,
@@ -21,7 +19,7 @@ pub const Element = struct {
         for (self.attrs) |attr| {
             var old_attrs = attrs;
             defer allocator.free(old_attrs);
-            const attr_str = try fmt.allocPrint(
+            const attr_str = try std.fmt.allocPrint(
                 allocator.*,
                 " {s}=\"{s}\"",
                 .{ attr.key, attr.val },
@@ -30,7 +28,7 @@ pub const Element = struct {
             attrs = try concat(attrs, attr_str);
         }
         defer allocator.free(attrs);
-        return fmt.allocPrint(allocator.*, "<{s}{s}></{s}>", .{
+        return std.fmt.allocPrint(allocator.*, "<{s}{s}></{s}>", .{
             self.tag,
             attrs,
             self.tag,
@@ -77,7 +75,7 @@ test "concat" {
 }
 
 pub fn p(content: []const u8) ![]const u8 {
-    return try fmt.allocPrint(allocator.*, "<p>{s}</p>", .{content});
+    return try std.fmt.allocPrint(allocator.*, "<p>{s}</p>", .{content});
 }
 
 test "p tag" {
