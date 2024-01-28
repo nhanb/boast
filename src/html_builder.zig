@@ -76,13 +76,13 @@ test "concat" {
     try std.testing.expectEqualSlices(u8, output, "hello world");
 }
 
-pub fn p(content: []const u8) []const u8 {
-    return fmt.allocPrint(allocator.*, "<p>{s}</p>", .{content}) catch unreachable;
+pub fn p(content: []const u8) ![]const u8 {
+    return try fmt.allocPrint(allocator.*, "<p>{s}</p>", .{content});
 }
 
 test "p tag" {
     allocator = &std.testing.allocator;
-    const output = p(@as([]const u8, "hello"));
+    const output = try p(@as([]const u8, "hello"));
     defer allocator.free(output);
     try std.testing.expectEqualSlices(u8, output, "<p>hello</p>");
 }
