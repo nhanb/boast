@@ -6,13 +6,18 @@ const Attr = struct {
     val: []const u8,
 };
 
+const ChildType = enum {
+    elem,
+    text,
+};
+
 pub const Element = struct {
     tag: []const u8,
     attrs: []const Attr,
-    //children: []union {
-    //elem: Element,
-    //text: []const u8,
-    //},
+    children: union(ChildType) {
+        elem: *Element,
+        text: []const u8,
+    },
 
     fn toString(self: Element) ![]const u8 {
         var attrs: []const u8 = "";
@@ -28,9 +33,16 @@ pub const Element = struct {
             attrs = try concat(attrs, attr_str);
         }
         defer allocator.free(attrs);
-        return std.fmt.allocPrint(allocator.*, "<{s}{s}></{s}>", .{
+
+        var children: []const u8 = switch (self.children) {
+            ChildType.text => |value| value,
+            ChildType.elem => |elem| try elem.toString(),
+        };
+
+        return std.fmt.allocPrint(allocator.*, "<{s}{s}>{s}</{s}>", .{
             self.tag,
             attrs,
+            children,
             self.tag,
         });
     }
@@ -51,13 +63,14 @@ test "Element" {
     const elem = Element{
         .tag = "div",
         .attrs = attrs[0..attrs.len],
+        .children = .{ .text = "wow" },
     };
     const result = try elem.toString();
     defer allocator.free(result);
     try std.testing.expectEqualSlices(
         u8,
         result,
-        "<div id=\"foo\" class=\"bar\"></div>",
+        "<div id=\"foo\" class=\"bar\">wow</div>",
     );
 }
 
