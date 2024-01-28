@@ -1,7 +1,44 @@
 const std = @import("std");
 var allocator: *const std.mem.Allocator = undefined;
 
-const Attr = struct {
+const Elem = struct {
+    pub fn toString(_: *Elem) []const u8 {
+        return "";
+    }
+};
+pub fn div(_: anytype, _: anytype) Elem {
+    //std.debug.print("{any}", attrs);
+    //std.debug.print("{any}", children);
+    return .{};
+}
+pub fn bold(_: anytype, _: anytype) Elem {
+    //std.debug.print("{any}", attrs);
+    //std.debug.print("{any}", children);
+    return .{};
+}
+pub fn text(_: []const u8) Elem {
+    //std.debug.print("{any}", attrs);
+    //std.debug.print("{any}", children);
+    return .{};
+}
+
+test "div and b" {
+    var el = div(
+        .{
+            .id = "foo",
+            .class = "bar",
+        },
+        .{
+            text("I like to be in"),
+            bold(.{}, text("America")),
+        },
+    );
+    std.debug.print("{s}", .{el.toString()});
+}
+
+//////////////////////////////////////////////
+
+pub const Attr = struct {
     key: []const u8,
     val: []const u8,
 };
