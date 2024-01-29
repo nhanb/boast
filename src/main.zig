@@ -1,5 +1,5 @@
 const std = @import("std");
-const html_builder = @import("./html_builder.zig");
+const HtmlBuilder = @import("./HtmlBuilder.zig");
 
 pub fn main() !void {
     // Init arena allocator
@@ -15,7 +15,7 @@ pub fn main() !void {
     var user_input = std.ArrayList(u8).init(arena_alloc);
     try stdin.streamUntilDelimiter(user_input.writer(), '\n', null);
 
-    const h = try html_builder.HtmlBuilder.init(arena_alloc);
+    const h = try HtmlBuilder.init(arena_alloc);
     var html = h.el(
         "div",
         .{
