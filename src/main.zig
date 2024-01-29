@@ -27,5 +27,5 @@ pub fn main() !void {
             h.el("b", .{}, .{user_input.items}),
         },
     );
-    std.debug.print("Here's your html:\n{s}", .{html});
+    std.debug.print("Here's your html:\n{s}\n", .{html});
 }

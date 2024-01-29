@@ -1,5 +1,10 @@
 const std = @import("std");
 
+/// HTML builder, inspired by the Mithril.js API. See test case for example usage.
+/// Doesn't free any memory itself - intended to be used with an arena allocator that deinit()s
+/// at the call site.
+/// Doesn't do any escape yet, so for now don't feed it untrusted inputs.
+/// Doesn't do self-closing tags yet either: TODO.
 pub const HtmlBuilder = struct {
     allocator: std.mem.Allocator,
 
