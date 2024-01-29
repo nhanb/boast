@@ -7,99 +7,61 @@ const HtmlBuilder = struct {
         return HtmlBuilder{ .allocator = allocator };
     }
 
-    pub fn Div(self: HtmlBuilder, attributes: anytype, _: anytype) !Element {
-        var el = try Element.init(self.allocator, "div");
+    pub fn El(
+        self: HtmlBuilder,
+        comptime tag: []const u8,
+        attributes: anytype,
+        children: anytype,
+    ) []const u8 {
+        var result = std.ArrayList(u8).init(self.allocator);
+        var writer = result.writer();
 
+        // Tag opening + attributes
+        writer.writeAll("<" ++ tag) catch unreachable;
         inline for (@typeInfo(@TypeOf(attributes)).Struct.fields) |field| {
-            try el.attrs.put(field.name, @field(attributes, field.name));
+            writer.writeAll(
+                " " ++
+                    field.name ++
+                    "=\"" ++
+                    @field(attributes, field.name) ++
+                    "\"",
+            ) catch unreachable;
+        }
+        writer.writeAll(">") catch unreachable;
+
+        // Children
+        inline for (children) |child| {
+            writer.writeAll(@as([]const u8, child)) catch unreachable;
         }
 
-        //inline for (children) |child| {
+        // Tag closing
+        writer.writeAll("</" ++ tag ++ ">") catch unreachable;
 
-        //}
-
-        return el;
-    }
-
-    pub fn B(self: HtmlBuilder, _: anytype, _: anytype) !Element {
-        const el = try Element.init(self.allocator, "b");
-        return el;
-    }
-};
-
-const ChildType = enum {
-    elem,
-    text,
-};
-
-pub const Element = struct {
-    allocator: std.mem.Allocator,
-    tag: []const u8,
-    attrs: std.StringHashMap([]const u8),
-    children: union(ChildType) {
-        elem: *Element,
-        text: []const u8,
-    },
-
-    pub fn init(alloc: std.mem.Allocator, tag: []const u8) !Element {
-        return .{
-            .allocator = alloc,
-            .tag = tag,
-            .attrs = std.StringHashMap([]const u8).init(alloc),
-            .children = .{ .text = "" },
-        };
-    }
-
-    fn toString(self: Element) ![]const u8 {
-        var attrs: []const u8 = "";
-        var it = self.attrs.iterator();
-        while (it.next()) |kv| {
-            var old_attrs = attrs;
-            defer self.allocator.free(old_attrs);
-            const attr_str = try std.fmt.allocPrint(
-                self.allocator,
-                " {s}=\"{s}\"",
-                .{ kv.key_ptr.*, kv.value_ptr.* },
-            );
-            defer self.allocator.free(attr_str);
-            attrs = try concat(self.allocator, attrs, attr_str);
-        }
-        defer self.allocator.free(attrs);
-
-        var children: []const u8 = switch (self.children) {
-            ChildType.text => |value| value,
-            ChildType.elem => |elem| try elem.toString(),
-        };
-
-        return std.fmt.allocPrint(self.allocator, "<{s}{s}>{s}</{s}>", .{
-            self.tag,
-            attrs,
-            children,
-            self.tag,
-        });
+        return result.items;
     }
 };
 
 test "Element" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa_alloc = gpa.allocator();
-    var arena = std.heap.ArenaAllocator.init(gpa_alloc);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
     const h = try HtmlBuilder.init(arena_alloc);
 
-    const elem = try h.Div(.{
-        .id = "foo",
-        .class = "bar",
-    }, .{
-        "This is ",
-        h.B(.{}, "bold"),
-    });
-    const result = try elem.toString();
+    const elem = h.El(
+        "div",
+        .{
+            .id = "foo",
+            .class = "bar",
+        },
+        .{
+            "This is ",
+            h.El("b", .{}, .{"bold"}),
+        },
+    );
     try std.testing.expectEqualStrings(
         "<div id=\"foo\" class=\"bar\">This is <b>bold</b></div>",
-        result,
+        elem,
     );
 }
 
