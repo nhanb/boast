@@ -1,24 +1,31 @@
 const std = @import("std");
+const html_builder = @import("./html_builder.zig");
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    // Init arena allocator
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa_alloc = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(gpa_alloc);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    // Get user input as string (actually an array list)
+    std.debug.print("Input please: ", .{});
+    const stdin = std.io.getStdIn().reader();
+    var user_input = std.ArrayList(u8).init(arena_alloc);
+    try stdin.streamUntilDelimiter(user_input.writer(), '\n', null);
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // don't forget to flush!
-}
-
-test "simple test" {
-    var list = std.ArrayList(i64).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i64, 42), list.pop());
+    const h = try html_builder.HtmlBuilder.init(arena_alloc);
+    var html = h.El(
+        "div",
+        .{
+            .id = "foo",
+            .class = "bar",
+        },
+        .{
+            "This is ",
+            h.El("b", .{}, .{user_input.items}),
+        },
+    );
+    std.debug.print("Here's your html:\n{s}", .{html});
 }

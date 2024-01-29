@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const HtmlBuilder = struct {
+pub const HtmlBuilder = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !HtmlBuilder {
