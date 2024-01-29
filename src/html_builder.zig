@@ -7,8 +7,17 @@ const HtmlBuilder = struct {
         return HtmlBuilder{ .allocator = allocator };
     }
 
-    pub fn Div(self: HtmlBuilder, _: anytype, _: anytype) !Element {
-        const el = try Element.init(self.allocator, "div");
+    pub fn Div(self: HtmlBuilder, attributes: anytype, _: anytype) !Element {
+        var el = try Element.init(self.allocator, "div");
+
+        inline for (@typeInfo(@TypeOf(attributes)).Struct.fields) |field| {
+            try el.attrs.put(field.name, @field(attributes, field.name));
+        }
+
+        //inline for (children) |child| {
+
+        //}
+
         return el;
     }
 
