@@ -16,7 +16,7 @@ pub fn main() !void {
     try stdin.streamUntilDelimiter(user_input.writer(), '\n', null);
 
     const h = try html_builder.HtmlBuilder.init(arena_alloc);
-    var html = h.El(
+    var html = h.el(
         "div",
         .{
             .id = "foo",
@@ -24,7 +24,7 @@ pub fn main() !void {
         },
         .{
             "This is ",
-            h.El("b", .{}, .{user_input.items}),
+            h.el("b", .{}, .{user_input.items}),
         },
     );
     std.debug.print("Here's your html:\n{s}", .{html});

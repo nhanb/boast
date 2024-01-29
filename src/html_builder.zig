@@ -7,7 +7,15 @@ pub const HtmlBuilder = struct {
         return HtmlBuilder{ .allocator = allocator };
     }
 
-    pub fn El(
+    pub fn div(self: HtmlBuilder, attributes: anytype, children: anytype) []const u8 {
+        return self.el("div", attributes, children);
+    }
+
+    pub fn b(self: HtmlBuilder, attributes: anytype, children: anytype) []const u8 {
+        return self.el("b", attributes, children);
+    }
+
+    pub fn el(
         self: HtmlBuilder,
         comptime tag: []const u8,
         attributes: anytype,
@@ -41,22 +49,21 @@ pub const HtmlBuilder = struct {
     }
 };
 
-test "Element" {
+test "HttpBuilder" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
     const h = try HtmlBuilder.init(arena_alloc);
 
-    const elem = h.El(
-        "div",
+    const elem = h.div(
         .{
             .id = "foo",
             .class = "bar",
         },
         .{
             "This is ",
-            h.El("b", .{}, .{"bold"}),
+            h.b(.{}, .{"bold"}),
         },
     );
     try std.testing.expectEqualStrings(
