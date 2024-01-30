@@ -1,7 +1,6 @@
 //! HTML builder, inspired by the Mithril.js API. See test case for example usage.
 //! Doesn't free any memory itself - intended to be used with an arena allocator that deinit()s
 //! at the call site.
-//! Doesn't do self-closing tags yet either: TODO.
 const std = @import("std");
 const HtmlBuilder = @This();
 
@@ -21,6 +20,10 @@ pub fn b(self: HtmlBuilder, attributes: anytype, children: anytype) []const u8 {
     return self.el("b", attributes, children);
 }
 
+pub fn hr(self: HtmlBuilder, attributes: anytype) []const u8 {
+    return self.el("hr", attributes, null);
+}
+
 pub fn el(
     self: HtmlBuilder,
     comptime tag: []const u8,
@@ -38,6 +41,10 @@ pub fn el(
         writer.writeAll("\"") catch unreachable;
     }
     writer.writeAll(">") catch unreachable;
+
+    if (@TypeOf(children) == @TypeOf(null)) {
+        return result.items; // is a void element a.k.a. self-closing
+    }
 
     // Children
     inline for (children) |child| {
@@ -93,10 +100,11 @@ test "HttpBuilder" {
         .{
             "This is ",
             h.b(.{}, .{"bold"}),
+            h.hr(.{}),
         },
     );
     try std.testing.expectEqualStrings(
-        \\<div id="foo" escapes="&quot; &#39; &lt; &gt; &amp;">This is <b>bold</b></div>
+        \\<div id="foo" escapes="&quot; &#39; &lt; &gt; &amp;">This is <b>bold</b><hr></div>
     ,
         elem,
     );
