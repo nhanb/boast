@@ -1,10 +1,11 @@
 //! HTML builder, inspired by the Mithril.js API. See test case for example usage.
 //! Doesn't free any memory itself - intended to be used with an arena allocator that deinit()s
 //! at the call site.
-//! Doesn't do any escape yet, so for now don't feed it untrusted inputs.
 //! Doesn't do self-closing tags yet either: TODO.
 const std = @import("std");
 const HtmlBuilder = @This();
+
+const Element = []const u8;
 
 allocator: std.mem.Allocator,
 
@@ -25,7 +26,7 @@ pub fn el(
     comptime tag: []const u8,
     attributes: anytype,
     children: anytype,
-) []const u8 {
+) Element {
     var result = std.ArrayList(u8).init(self.allocator);
     var writer = result.writer();
 
@@ -40,7 +41,11 @@ pub fn el(
 
     // Children
     inline for (children) |child| {
-        writer.writeAll(@as([]const u8, child)) catch unreachable;
+        var child_str = @as([]const u8, child);
+        if (@TypeOf(child) != Element) {
+            child_str = self.escape(child_str);
+        }
+        writer.writeAll(child_str) catch unreachable;
     }
 
     // Tag closing
