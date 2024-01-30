@@ -32,13 +32,9 @@ pub fn el(
     // Tag opening + attributes
     writer.writeAll("<" ++ tag) catch unreachable;
     inline for (@typeInfo(@TypeOf(attributes)).Struct.fields) |field| {
-        writer.writeAll(
-            " " ++
-                field.name ++
-                "=\"" ++
-                @field(attributes, field.name) ++
-                "\"",
-        ) catch unreachable;
+        writer.writeAll(" " ++ field.name ++ "=\"") catch unreachable;
+        writer.writeAll(self.escape(@field(attributes, field.name))) catch unreachable;
+        writer.writeAll("\"") catch unreachable;
     }
     writer.writeAll(">") catch unreachable;
 
@@ -53,6 +49,30 @@ pub fn el(
     return result.items;
 }
 
+fn escape(self: HtmlBuilder, attr: []const u8) []const u8 {
+    var output: []u8 = undefined;
+    var input: []const u8 = attr;
+    inline for (.{
+        "&",
+        "\"",
+        "'",
+        "<",
+        ">",
+    }, .{
+        "&amp;",
+        "&quot;",
+        "&#39;",
+        "&lt;",
+        "&gt;",
+    }) |needle, replacement| {
+        const size = std.mem.replacementSize(u8, input, needle, replacement);
+        output = self.allocator.alloc(u8, size) catch unreachable;
+        _ = std.mem.replace(u8, input, needle, replacement, output);
+        input = output;
+    }
+    return output;
+}
+
 test "HttpBuilder" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -63,7 +83,7 @@ test "HttpBuilder" {
     const elem = h.div(
         .{
             .id = "foo",
-            .class = "bar",
+            .escapes = "\" ' < > &",
         },
         .{
             "This is ",
@@ -71,7 +91,8 @@ test "HttpBuilder" {
         },
     );
     try std.testing.expectEqualStrings(
-        "<div id=\"foo\" class=\"bar\">This is <b>bold</b></div>",
+        \\<div id="foo" escapes="&quot; &#39; &lt; &gt; &amp;">This is <b>bold</b></div>
+    ,
         elem,
     );
 }
