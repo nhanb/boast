@@ -1,5 +1,5 @@
 const std = @import("std");
-const HtmlBuilder = @import("./HtmlBuilder.zig");
+const html = @import("./html.zig");
 
 pub fn main() !void {
     // Init arena allocator
@@ -15,16 +15,16 @@ pub fn main() !void {
     //var user_input = std.ArrayList(u8).init(arena_alloc);
     //try stdin.streamUntilDelimiter(user_input.writer(), '\n', null);
 
-    const h = try HtmlBuilder.init(arena_alloc);
-    var html = h.html(
+    const b = html.Builder{ .allocator = arena_alloc };
+    var document = b.html(
         .{ .lang = "en" },
         .{
-            h.head(.{}, .{
-                h.meta(.{ .charset = "utf-8" }),
-                h.title(.{}, .{"Hello"}),
-                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
+            b.head(.{}, .{
+                b.meta(.{ .charset = "utf-8" }),
+                b.title(.{}, .{"Hello'"}),
+                b.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
             }),
-            h.body(
+            b.body(
                 .{},
                 .{"This is my body."},
             ),
@@ -42,7 +42,7 @@ pub fn main() !void {
 
     try cp.spawn();
 
-    try cp.stdin.?.writeAll(html);
+    try document.write(cp.stdin.?.writer());
     cp.stdin.?.close();
     cp.stdin = null;
 
