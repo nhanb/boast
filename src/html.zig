@@ -67,6 +67,35 @@ test "Builder" {
     , out.items);
 }
 
+pub const Builder2 = struct {
+    allocator: std.mem.Allocator,
+
+    pub fn open(self: Builder2, writer: anytype, tag: []const u8, attributes: anytype) void {
+        writer.writeAll("<") catch unreachable;
+        writer.writeAll(tag) catch unreachable;
+
+        if (@TypeOf(attributes) != @TypeOf(null)) {
+            inline for (@typeInfo(@TypeOf(attributes)).Struct.fields) |field| {
+                writer.writeAll(" " ++ field.name ++ "=\"") catch unreachable;
+                writer.writeAll(escape(self.allocator, @field(attributes, field.name))) catch unreachable;
+                writer.writeAll("\"") catch unreachable;
+            }
+        }
+
+        writer.writeAll(">") catch unreachable;
+    }
+
+    pub fn close(_: Builder2, writer: anytype, tag: []const u8) void {
+        writer.writeAll("</") catch unreachable;
+        writer.writeAll(tag) catch unreachable;
+        writer.writeAll(">") catch unreachable;
+    }
+
+    pub fn write(self: Builder2, writer: anytype, text: []const u8) void {
+        writer.writeAll(escape(self.allocator, text)) catch unreachable;
+    }
+};
+
 pub const Builder = struct {
     allocator: std.mem.Allocator,
 
