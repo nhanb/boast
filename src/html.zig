@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Element = struct {
+pub const Element = struct {
     allocator: std.mem.Allocator,
     tag: []const u8,
     attrs: []Attr,

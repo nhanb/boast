@@ -38,10 +38,13 @@ test "findRepos" {
     defer arena.deinit();
     var arena_allocator = arena.allocator();
 
+    // TODO: how do I mock a filesystem?
     var repos = try findRepos(arena_allocator, "/home/nhanb/pj/");
 
-    std.debug.print("\n", .{});
-    for (repos) |path| {
-        std.debug.print(">> {s}\n", .{path});
-    }
+    //std.debug.print("\n", .{});
+    //for (repos) |path| {
+    //    std.debug.print(">> {s}\n", .{path});
+    //}
+
+    try std.testing.expect(repos.len > 0);
 }
