@@ -1,9 +1,11 @@
 const std = @import("std");
 
 pub const Element = struct {
-    tag: []const u8,
+    tag: []const u8 = "",
+    text: []const u8 = "",
+
     attrs: []const Attr = &[0]Attr{},
-    children: ?[]const Child = &[0]Child{},
+    children: ?[]const Element = &[0]Element{},
 };
 
 //pub const A = makeTag("a", true);
@@ -20,11 +22,6 @@ pub const Element = struct {
 //}
 
 pub const Attr = struct { []const u8, []const u8 };
-
-pub const Child = union(enum) {
-    elem: Element,
-    text: []const u8,
-};
 
 fn escape(allocator: std.mem.Allocator, attr: []const u8) []const u8 {
     var escaped: []u8 = undefined;
@@ -56,17 +53,17 @@ test "Builder" {
 
     const elem = Element{
         .tag = "div",
-        .attrs = &[_]Attr{
+        .attrs = &.{
             .{ "id", "foo" },
             .{ "escapes", "\" ' < > &" },
         },
-        .children = &[_]Child{
+        .children = &.{
             .{ .text = "This is " },
-            .{ .elem = Element{
+            .{
                 .tag = "b",
-                .children = &[_]Child{.{ .text = "bold" }},
-            } },
-            .{ .elem = Element{ .tag = "hr", .children = null } },
+                .children = &.{.{ .text = "bold" }},
+            },
+            .{ .tag = "hr", .children = null },
         },
     };
 
@@ -86,21 +83,12 @@ test "Builder" {
 pub const Builder = struct {
     allocator: std.mem.Allocator,
 
-    pub fn el(
-        self: Builder,
-        comptime tag: []const u8,
-        attributes: []const Attr,
-        children: ?[]const Child,
-    ) Element {
-        return Element{
-            .allocator = self.allocator,
-            .tag = tag,
-            .attrs = attributes,
-            .children = children,
-        };
-    }
-
     pub fn write(self: Builder, element: Element, writer: anytype) !void {
+        if (!std.mem.eql(u8, element.text, "")) {
+            try writer.writeAll(escape(self.allocator, element.text));
+            return;
+        }
+
         try writer.writeAll("<");
         try writer.writeAll(element.tag);
         for (element.attrs) |attr| {
@@ -116,10 +104,7 @@ pub const Builder = struct {
 
         if (element.children) |children| {
             for (children) |child| {
-                switch (child) {
-                    Child.elem => |elem| try self.write(elem, writer),
-                    Child.text => |text| try writer.writeAll(escape(self.allocator, text)),
-                }
+                try self.write(child, writer);
             }
 
             try writer.writeAll("</");
