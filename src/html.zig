@@ -27,13 +27,11 @@ const Element = struct {
                     Child.text => |text| try writer.writeAll(escape(self.allocator, text)),
                 }
             }
-        } else {
-            return; // children=null means this is a self-closing tag
-        }
 
-        try writer.writeAll("</");
-        try writer.writeAll(self.tag);
-        try writer.writeAll(">");
+            try writer.writeAll("</");
+            try writer.writeAll(self.tag);
+            try writer.writeAll(">");
+        }
     }
 };
 
