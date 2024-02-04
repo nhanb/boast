@@ -6,13 +6,14 @@ pub fn index(allocator: std.mem.Allocator, writer: anytype, repos: [][]const u8)
     var h = html.Builder{ .allocator = allocator };
     var repo_rows = std.ArrayList(html.Element).init(allocator);
     for (repos) |repo| {
-        try repo_rows.append(h.li(
-            .{},
-            .{h.a(
-                .{ .href = repo },
-                .{repo},
-            )},
-        ));
+        try repo_rows.append(html.Element{
+            .allocator = allocator,
+            .tag = "li",
+            .attrs = &[_]html.Attr{},
+            .children = &[_]html.Child{
+                .{ .text = repo },
+            },
+        });
     }
     var document = h.html(
         .{ .lang = "en" },

@@ -16,12 +16,7 @@ voids = {
     "wbr",
 }
 for tag in sorted(voids):
-    print(
-        f"""
-pub fn @"{tag}"(self: HtmlBuilder, attributes: anytype) Element {{
-    return self.el("{tag}", attributes, null);
-}}"""
-    )
+    print(f'    .{{ "{tag}", true }},')
 
 tags = {
     "a",
@@ -154,9 +149,4 @@ tags = {
     "xmp",
 }
 for tag in sorted(tags - voids):
-    print(
-        f"""
-pub fn @"{tag}"(self: HtmlBuilder, attributes: anytype, children: anytype) Element {{
-    return self.el("{tag}", attributes, children);
-}}"""
-    )
+    print(f'    .{{ "{tag}", false }},')
