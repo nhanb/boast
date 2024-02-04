@@ -5,21 +5,8 @@ pub const Element = struct {
     text: []const u8 = "",
 
     attrs: []const Attr = &[0]Attr{},
-    children: ?[]const Element = &[0]Element{},
+    children: []const Element = &[0]Element{},
 };
-
-//pub const A = makeTag("a", true);
-//pub const Div = makeTag("div", true);
-//fn makeTag(name: []const u8, is_void: bool) type {
-//    return @Type(.{
-//        .Struct = .{
-//            .layout = .Auto,
-//            .fields = &[_]std.builtin.TypeInfo.StructField{},
-//            .decls = &[_]std.builtin.TypeInfo.Declaration{},
-//            .is_tuple = false,
-//        }
-//    });
-//}
 
 pub const Attr = struct { []const u8, []const u8 };
 
@@ -63,7 +50,7 @@ test "Builder" {
                 .tag = "b",
                 .children = &.{.{ .text = "bold" }},
             },
-            .{ .tag = "hr", .children = null },
+            .{ .tag = "hr" },
         },
     };
 
@@ -102,16 +89,36 @@ pub const Builder = struct {
         }
         try writer.writeAll(">");
 
-        if (element.children) |children| {
-            for (children) |child| {
-                try self.write(child, writer);
+        inline for (void_tags) |void_tag| {
+            if (std.mem.eql(u8, element.tag, void_tag)) {
+                return;
             }
-
-            try writer.writeAll("</");
-            try writer.writeAll(element.tag);
-            try writer.writeAll(">");
         }
+
+        for (element.children) |child| {
+            try self.write(child, writer);
+        }
+
+        try writer.writeAll("</");
+        try writer.writeAll(element.tag);
+        try writer.writeAll(">");
     }
+};
+
+const void_tags = &[_][]const u8{
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "source",
+    "track",
+    "wbr",
 };
 
 const tags: struct {
