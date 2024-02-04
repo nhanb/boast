@@ -6,28 +6,39 @@ pub fn index(allocator: std.mem.Allocator, writer: anytype, repos: [][]const u8)
     var h = html.Builder{ .allocator = allocator };
     var repo_rows = std.ArrayList(html.Element).init(allocator);
     for (repos) |repo| {
+        std.debug.print("{s}\n", .{repo});
+        const text = try allocator.dupe(u8, repo);
         try repo_rows.append(html.Element{
-            .allocator = allocator,
             .tag = "li",
-            .attrs = &[_]html.Attr{},
-            .children = &[_]html.Child{
-                .{ .text = repo },
+            .children = &.{
+                .{ .text = text },
             },
         });
     }
-    var document = h.html(
-        .{ .lang = "en" },
-        .{
-            h.head(.{}, .{
-                h.meta(.{ .charset = "utf-8" }),
-                h.title(.{}, .{"Hello"}),
-                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
-            }),
-            h.body(.{}, repo_rows.items),
-        },
-    );
 
-    try document.writeTo(writer);
+    var document = html.Element{
+        .tag = "html",
+        .attrs = &.{.{ "lang", "en" }},
+        .children = &.{
+            .{
+                .tag = "head",
+                .children = &.{
+                    .{ .tag = "meta", .attrs = &.{.{ "charset", "utf-8" }} },
+                    .{ .tag = "meta", .attrs = &.{
+                        .{ "name", "viewport" },
+                        .{ "content", "width=device-width, initial-scale=1.0" },
+                    } },
+                    .{ .tag = "title", .children = &.{.{ .text = "Hello" }} },
+                },
+            },
+            .{
+                .tag = "body",
+                .children = repo_rows.items,
+            },
+        },
+    };
+
+    try h.write(document, writer);
 }
 
 test "index" {
