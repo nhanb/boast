@@ -42,7 +42,7 @@ pub fn main() !void {
 
     try cp.spawn();
 
-    try document.write(cp.stdin.?.writer());
+    try document.writeTo(cp.stdin.?.writer());
     cp.stdin.?.close();
     cp.stdin = null;
 

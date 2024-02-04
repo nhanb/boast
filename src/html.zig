@@ -6,7 +6,7 @@ const Element = struct {
     attrs: []Attr,
     children: ?[]const Child,
 
-    pub fn write(self: Element, writer: anytype) !void {
+    pub fn writeTo(self: Element, writer: anytype) !void {
         try writer.writeAll("<");
         try writer.writeAll(self.tag);
         for (self.attrs) |attr| {
@@ -23,7 +23,7 @@ const Element = struct {
         if (self.children) |children| {
             for (children) |child| {
                 switch (child) {
-                    Child.elem => |elem| try elem.write(writer),
+                    Child.elem => |elem| try elem.writeTo(writer),
                     Child.text => |text| try writer.writeAll(escape(self.allocator, text)),
                 }
             }
@@ -86,9 +86,9 @@ test "Builder" {
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
 
-    try elem.write(out.writer());
+    try elem.writeTo(out.writer());
 
-    // This frees the html builder's resources but doesn't affect output
+    // This frees the html builder's resources but doesn't affect `out`
     arena.deinit();
 
     try std.testing.expectEqualStrings(
