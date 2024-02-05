@@ -48,3 +48,53 @@ test "findRepos" {
 
     try std.testing.expect(repos.len > 0);
 }
+
+pub const Commit = struct {
+    hash: []const u8,
+    subject: []const u8,
+    date: []const u8,
+};
+
+pub fn listCommits(allocator: std.mem.Allocator, absolute_path: []const u8) ![]Commit {
+    var result = try std.ChildProcess.exec(.{
+        .allocator = allocator,
+        .argv = &.{
+            "git",
+            "log",
+            "-z", // makes NUL byte the delimiter between commits instead of \n
+            "--pretty=format:%H\n%s\n%ai",
+        },
+        .cwd = absolute_path,
+        .max_output_bytes = 1024 * 1024 * 1000,
+    });
+
+    var commits = std.ArrayList(Commit).init(allocator);
+
+    var commit_texts = std.mem.splitSequence(u8, result.stdout, "\x00");
+    while (commit_texts.next()) |commit_text| {
+        if (commit_text.len == 0) {
+            continue;
+        }
+        var fields_iter = std.mem.splitSequence(u8, commit_text, "\n");
+        try commits.append(Commit{
+            .hash = fields_iter.next().?,
+            .subject = fields_iter.next().?,
+            .date = fields_iter.next().?,
+        });
+    }
+    return commits.items;
+}
+
+test "listCommits" {
+    var test_alloc = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(test_alloc);
+    defer arena.deinit();
+
+    // TODO: how do I mock a ChilProcess's result?
+    var commits = try listCommits(arena.allocator(), "/home/nhanb/pj/boast");
+    //for (commits) |c| {
+    //    std.debug.print("{s} - {s} - {s}\n", .{ c.hash, c.date, c.subject });
+    //}
+
+    try std.testing.expect(commits.len > 0);
+}
