@@ -2,46 +2,50 @@ const std = @import("std");
 const html = @import("./html.zig");
 const git = @import("./git.zig");
 
-pub fn index(allocator: std.mem.Allocator, writer: anytype, repos: [][]const u8) void {
-    var h = html.Builder2{ .allocator = allocator };
-    var w = writer;
-
+pub fn index(
+    comptime WriterT: type,
+    allocator: std.mem.Allocator,
+    writer: WriterT,
+    repos: [][]const u8,
+) !void {
+    var h = html.Builder(WriterT, true).init(allocator, writer);
+    try h.doctype();
     {
-        h.open(w, "html", .{ .lang = "en", .style = "font-family: 'sans-serif';" });
-        defer h.close(w, "html");
+        try h.open("html", .{ .lang = "en", .style = "font-family: sans-serif;" });
+        defer h.close();
         {
-            h.open(w, "head", null);
-            defer h.close(w, "head");
+            try h.open("head", null);
+            defer h.close();
             {
-                h.open(w, "title", null);
-                defer h.close(w, "title");
-                h.write(w, "Hello");
+                try h.open("title", null);
+                defer h.close();
+                try h.text("Hello");
             }
-            h.open(w, "meta", .{ .charset = "utf-8" });
-            h.open(w, "meta", .{
+            try h.open("meta", .{ .charset = "utf-8" });
+            try h.open("meta", .{
                 .name = "viewport",
                 .content = "width=device-width, initial-scale=1.0",
             });
         }
         {
-            h.open(w, "body", null);
-            defer h.close(w, "body");
+            try h.open("body", null);
+            defer h.close();
             {
-                h.open(w, "h1", null);
-                defer h.close(w, "h1");
-                h.write(w, "My repos:");
+                try h.open("h1", null);
+                defer h.close();
+                try h.text("My repos:");
             }
-            h.open(w, "hr", null);
+            try h.open("hr", null);
             {
-                h.open(w, "ul", null);
-                defer h.close(w, "ul");
+                try h.open("ul", null);
+                defer h.close();
                 for (repos) |repo| {
-                    h.open(w, "li", null);
-                    defer h.close(w, "li");
+                    try h.open("li", null);
+                    defer h.close();
                     {
-                        h.open(w, "a", .{ .href = repo });
-                        defer h.close(w, "a");
-                        h.write(w, repo);
+                        try h.open("a", .{ .href = repo });
+                        defer h.close();
+                        try h.text(repo);
                     }
                 }
             }
@@ -56,7 +60,7 @@ test "index" {
 
     var repos = try git.findRepos(arena_alloc, "/home/nhanb/pj/");
     var output = std.ArrayList(u8).init(arena_alloc);
-    index(arena_alloc, output.writer(), repos);
+    try index(std.ArrayList(u8).Writer, arena_alloc, output.writer(), repos);
 
     const file = try std.fs.cwd().createFile("index.html", .{});
     defer file.close();

@@ -1,15 +1,5 @@
 const std = @import("std");
 
-pub const Element = struct {
-    tag: []const u8 = "",
-    text: []const u8 = "",
-
-    attrs: []const Attr = &[0]Attr{},
-    children: []const Element = &[0]Element{},
-};
-
-pub const Attr = struct { []const u8, []const u8 };
-
 fn escape(allocator: std.mem.Allocator, attr: []const u8) []const u8 {
     var escaped: []u8 = undefined;
     var unescaped: []const u8 = attr;
@@ -34,105 +24,103 @@ fn escape(allocator: std.mem.Allocator, attr: []const u8) []const u8 {
     return escaped;
 }
 
-test "Builder" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    var b = Builder{ .allocator = arena.allocator() };
+pub fn Builder(comptime WriterT: type, comptime pretty: bool) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        writer: WriterT,
+        tag_stack: std.ArrayList([]const u8),
 
-    const elem = Element{
-        .tag = "div",
-        .attrs = &.{
-            .{ "id", "foo" },
-            .{ "escapes", "\" ' < > &" },
-        },
-        .children = &.{
-            .{ .text = "This is " },
-            .{
-                .tag = "b",
-                .children = &.{.{ .text = "bold" }},
-            },
-            .{ .tag = "hr" },
-        },
+        pub fn init(allocator: std.mem.Allocator, writer: WriterT) @This() {
+            return @This(){
+                .allocator = allocator,
+                .writer = writer,
+                .tag_stack = std.ArrayList([]const u8).init(allocator),
+            };
+        }
+
+        pub fn doctype(self: *@This()) !void {
+            try self.writer.writeAll("<!DOCTYPE html>\n");
+        }
+
+        pub fn open(self: *@This(), tag: []const u8, attributes: anytype) !void {
+            try self.indent();
+            try self.writer.writeAll("<");
+            try self.writer.writeAll(tag);
+
+            if (@TypeOf(attributes) != @TypeOf(null)) {
+                inline for (@typeInfo(@TypeOf(attributes)).Struct.fields) |field| {
+                    // https://html.spec.whatwg.org/multipage/syntax.html#attributes-2
+                    // Attribute names must consist of one or more characters other than
+                    // controls, U+0020 SPACE, U+0022 ("), U+0027 ('), U+003E (>), U+002F (/),
+                    // U+003D (=), and noncharacters. In the HTML syntax, attribute names, even
+                    // those for foreign elements, may be written with any mix of ASCII lower
+                    // and ASCII upper alphas.
+                    comptime for (field.name) |char| {
+                        if (!std.ascii.isASCII(char)) {
+                            unreachable; // found non-ascii char in html attribute name
+                        }
+                        if (std.ascii.isControl(char)) {
+                            unreachable; // found forbidden control char in html attribute name
+                        }
+                        for (" \"'>/=") |forbidden_char| {
+                            if (char == forbidden_char) {
+                                unreachable; // found forbidden char in html attribute name
+                            }
+                        }
+                    };
+                    try self.writer.writeAll(" ");
+                    try self.writer.writeAll(field.name);
+                    try self.writer.writeAll("=\"");
+                    try self.writer.writeAll(escape(self.allocator, @field(attributes, field.name)));
+                    try self.writer.writeAll("\"");
+                }
+            }
+
+            try self.writer.writeAll(">");
+            if (pretty) {
+                try self.writer.writeAll("\n");
+            }
+
+            // Add tag to stack only if it's not a void HTML element
+            for (void_tags) |vtag| {
+                if (std.mem.eql(u8, tag, vtag)) {
+                    return;
+                }
+            }
+            try self.tag_stack.append(tag);
+        }
+
+        // TODO: cannot bubble error up here because `defer try close()` isn't supported.
+        // Crashing during a write isn't ideal either, because that rules out writing to a network
+        // writer. Is there a better way?
+        pub fn close(self: *@This()) void {
+            var tag = self.tag_stack.pop();
+            self.indent() catch unreachable;
+            self.writer.writeAll("</") catch unreachable;
+            self.writer.writeAll(tag) catch unreachable;
+            self.writer.writeAll(">") catch unreachable;
+            if (pretty) {
+                self.writer.writeAll("\n") catch unreachable;
+            }
+        }
+
+        pub fn text(self: *@This(), content: []const u8) !void {
+            try self.indent();
+            try self.writer.writeAll(escape(self.allocator, content));
+            if (pretty) {
+                self.writer.writeAll("\n") catch unreachable;
+            }
+        }
+
+        fn indent(self: *@This()) !void {
+            if (pretty) {
+                for (0..self.tag_stack.items.len) |_| {
+                    try self.writer.writeAll("  ");
+                }
+            }
+        }
     };
-
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
-
-    try b.write(elem, out.writer());
-
-    // This frees the html builder's resources but doesn't affect `out`
-    arena.deinit();
-
-    try std.testing.expectEqualStrings(
-        \\<div id="foo" escapes="&quot; &#39; &lt; &gt; &amp;">This is <b>bold</b><hr></div>
-    , out.items);
 }
-
-pub const Builder2 = struct {
-    allocator: std.mem.Allocator,
-
-    pub fn open(self: Builder2, writer: anytype, tag: []const u8, attributes: anytype) void {
-        writer.writeAll("<") catch unreachable;
-        writer.writeAll(tag) catch unreachable;
-
-        if (@TypeOf(attributes) != @TypeOf(null)) {
-            inline for (@typeInfo(@TypeOf(attributes)).Struct.fields) |field| {
-                writer.writeAll(" " ++ field.name ++ "=\"") catch unreachable;
-                writer.writeAll(escape(self.allocator, @field(attributes, field.name))) catch unreachable;
-                writer.writeAll("\"") catch unreachable;
-            }
-        }
-
-        writer.writeAll(">") catch unreachable;
-    }
-
-    pub fn close(_: Builder2, writer: anytype, tag: []const u8) void {
-        writer.writeAll("</") catch unreachable;
-        writer.writeAll(tag) catch unreachable;
-        writer.writeAll(">") catch unreachable;
-    }
-
-    pub fn write(self: Builder2, writer: anytype, text: []const u8) void {
-        writer.writeAll(escape(self.allocator, text)) catch unreachable;
-    }
-};
-
-pub const Builder = struct {
-    allocator: std.mem.Allocator,
-
-    pub fn write(self: Builder, element: Element, writer: anytype) !void {
-        if (!std.mem.eql(u8, element.text, "")) {
-            try writer.writeAll(escape(self.allocator, element.text));
-            return;
-        }
-
-        try writer.writeAll("<");
-        try writer.writeAll(element.tag);
-        for (element.attrs) |attr| {
-            const name = escape(self.allocator, attr[0]);
-            const value = escape(self.allocator, attr[1]);
-            try writer.writeAll(" ");
-            try writer.writeAll(name);
-            try writer.writeAll("=\"");
-            try writer.writeAll(value);
-            try writer.writeAll("\"");
-        }
-        try writer.writeAll(">");
-
-        inline for (void_tags) |void_tag| {
-            if (std.mem.eql(u8, element.tag, void_tag)) {
-                return;
-            }
-        }
-
-        for (element.children) |child| {
-            try self.write(child, writer);
-        }
-
-        try writer.writeAll("</");
-        try writer.writeAll(element.tag);
-        try writer.writeAll(">");
-    }
-};
 
 const void_tags = &[_][]const u8{
     "area",
@@ -150,137 +138,37 @@ const void_tags = &[_][]const u8{
     "wbr",
 };
 
-const tags: struct {
-    []const u8, // tag name
-    bool, // is void element?
-} = .{
-    .{ "area", true },
-    .{ "base", true },
-    .{ "br", true },
-    .{ "col", true },
-    .{ "embed", true },
-    .{ "hr", true },
-    .{ "img", true },
-    .{ "input", true },
-    .{ "link", true },
-    .{ "meta", true },
-    .{ "source", true },
-    .{ "track", true },
-    .{ "wbr", true },
+test "Builder" {
+    var test_allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(test_allocator);
 
-    .{ "a", false },
-    .{ "abbr", false },
-    .{ "acronym", false },
-    .{ "address", false },
-    .{ "article", false },
-    .{ "aside", false },
-    .{ "audio", false },
-    .{ "b", false },
-    .{ "bdi", false },
-    .{ "bdo", false },
-    .{ "big", false },
-    .{ "blockquote", false },
-    .{ "body", false },
-    .{ "button", false },
-    .{ "canvas", false },
-    .{ "caption", false },
-    .{ "center", false },
-    .{ "cite", false },
-    .{ "code", false },
-    .{ "colgroup", false },
-    .{ "data", false },
-    .{ "datalist", false },
-    .{ "dd", false },
-    .{ "del", false },
-    .{ "details", false },
-    .{ "dfn", false },
-    .{ "dialog", false },
-    .{ "dir", false },
-    .{ "div", false },
-    .{ "dl", false },
-    .{ "dt", false },
-    .{ "em", false },
-    .{ "fieldset", false },
-    .{ "figcaption", false },
-    .{ "figure", false },
-    .{ "font", false },
-    .{ "footer", false },
-    .{ "form", false },
-    .{ "frame", false },
-    .{ "frameset", false },
-    .{ "h1", false },
-    .{ "head", false },
-    .{ "header", false },
-    .{ "hgroup", false },
-    .{ "html", false },
-    .{ "i", false },
-    .{ "iframe", false },
-    .{ "image", false },
-    .{ "ins", false },
-    .{ "kbd", false },
-    .{ "label", false },
-    .{ "legend", false },
-    .{ "li", false },
-    .{ "main", false },
-    .{ "map", false },
-    .{ "mark", false },
-    .{ "marquee", false },
-    .{ "menu", false },
-    .{ "menuitem", false },
-    .{ "meter", false },
-    .{ "nav", false },
-    .{ "nobr", false },
-    .{ "noembed", false },
-    .{ "noframes", false },
-    .{ "noscript", false },
-    .{ "object", false },
-    .{ "ol", false },
-    .{ "optgroup", false },
-    .{ "option", false },
-    .{ "output", false },
-    .{ "p", false },
-    .{ "param", false },
-    .{ "picture", false },
-    .{ "plaintext", false },
-    .{ "portal", false },
-    .{ "pre", false },
-    .{ "progress", false },
-    .{ "q", false },
-    .{ "rb", false },
-    .{ "rp", false },
-    .{ "rt", false },
-    .{ "rtc", false },
-    .{ "ruby", false },
-    .{ "s", false },
-    .{ "samp", false },
-    .{ "script", false },
-    .{ "search", false },
-    .{ "section", false },
-    .{ "select", false },
-    .{ "slot", false },
-    .{ "small", false },
-    .{ "span", false },
-    .{ "strike", false },
-    .{ "strong", false },
-    .{ "style", false },
-    .{ "sub", false },
-    .{ "summary", false },
-    .{ "sup", false },
-    .{ "table", false },
-    .{ "tbody", false },
-    .{ "td", false },
-    .{ "template", false },
-    .{ "textarea", false },
-    .{ "tfoot", false },
-    .{ "th", false },
-    .{ "thead", false },
-    .{ "time", false },
-    .{ "title", false },
-    .{ "tr", false },
-    .{ "tt", false },
-    .{ "u", false },
-    .{ "ul", false },
-    .{ "var", false },
-    .{ "video", false },
-    .{ "xmp", false },
-};
+    var output = std.ArrayList(u8).init(test_allocator);
+    defer output.deinit();
+
+    var h = Builder(std.ArrayList(u8).Writer, true).init(arena.allocator(), output.writer());
+    {
+        try h.open("p", .{ .@"escapes<&" = "&<>\"'" });
+        defer h.close();
+        try h.text("I'm");
+        {
+            try h.open("b", null);
+            defer h.close();
+            try h.text("bold.");
+            try h.text("&<>\"'");
+        }
+    }
+
+    // we can safely free the builder's arena now because `output` isn't in it.
+    arena.deinit();
+
+    try std.testing.expectEqualStrings(
+        \\<p escapes<&="&amp;&lt;&gt;&quot;&#39;">
+        \\  I&#39;m
+        \\  <b>
+        \\    bold.
+        \\    &amp;&lt;&gt;&quot;&#39;
+        \\  </b>
+        \\</p>
+        \\
+    , output.items);
+}
