@@ -145,7 +145,7 @@ pub fn writeCommit(
     repo_path: []const u8,
     commit_hash: []const u8,
 ) !void {
-    print("commit: {s}\n", .{commit_hash});
+    //print("commit: {s}\n", .{commit_hash});
     const git_result = try std.ChildProcess.run(.{
         .allocator = aa,
         .argv = &.{ "git", "show", "--color", commit_hash },
@@ -162,23 +162,24 @@ pub fn writeCommit(
     var stdout = std.ArrayList(u8).init(aa);
     var stderr = std.ArrayList(u8).init(aa);
 
-    print("spawning\n", .{});
     try cp.spawn();
 
-    print("writing {d}K\n", .{git_result.stdout.len / 1024});
-    //print("{s}\n", .{git_result.stdout});
-    //var blob: [1024 * 134]u8 = undefined;
-    //@memset(&blob, 'a');
-    //try cp.stdin.?.writeAll(&blob);
+    // Concurrently drain aha's stdout so it doesn't deadlock on stdin
+    const thread = try std.Thread.spawn(.{}, drainStdout, .{ &cp, &stdout, &stderr });
+
+    //print("writing {d}K\n", .{git_result.stdout.len / 1024});
     try cp.stdin.?.writeAll(git_result.stdout);
-    print("closing\n", .{});
     cp.stdin.?.close();
     cp.stdin = null;
-    print("collecting\n", .{});
-    try cp.collectOutput(&stdout, &stderr, 1024 * 1024 * 1024);
+
+    thread.join();
     _ = try cp.wait();
 
     try writer.writeAll(try stdout.toOwnedSlice());
+}
+
+fn drainStdout(c: *std.ChildProcess, stdout: anytype, stderr: anytype) !void {
+    try c.collectOutput(stdout, stderr, 1024 * 1024 * 1024);
 }
 
 test "index and repos" {
