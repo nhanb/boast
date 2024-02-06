@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn findRepos(allocator: std.mem.Allocator, absolute_path: []const u8) ![][]const u8 {
     var repos = std.ArrayList([]const u8).init(allocator);
 
-    var dir = try std.fs.openIterableDirAbsolute(absolute_path, .{});
+    var dir = try std.fs.openDirAbsolute(absolute_path, .{ .iterate = true });
     defer dir.close();
 
     var it = dir.iterate();
@@ -14,12 +14,12 @@ pub fn findRepos(allocator: std.mem.Allocator, absolute_path: []const u8) ![][]c
 
         // Skip subdir if it's not a git repo
         if (!std.mem.endsWith(u8, entry.name, ".git")) {
-            var git_subfolder_path = try std.mem.concat(allocator, u8, &[_][]const u8{
+            const git_subfolder_path = try std.mem.concat(allocator, u8, &[_][]const u8{
                 entry.name,
                 std.fs.path.sep_str,
                 ".git",
             });
-            if (dir.dir.access(git_subfolder_path, .{})) |_| {} else |_| {
+            if (dir.access(git_subfolder_path, .{})) |_| {} else |_| {
                 continue;
             }
         }
@@ -32,14 +32,14 @@ pub fn findRepos(allocator: std.mem.Allocator, absolute_path: []const u8) ![][]c
 }
 
 test "findRepos" {
-    var test_allocator = std.testing.allocator;
+    const test_allocator = std.testing.allocator;
 
     var arena = std.heap.ArenaAllocator.init(test_allocator);
     defer arena.deinit();
-    var arena_allocator = arena.allocator();
+    const arena_allocator = arena.allocator();
 
     // TODO: how do I mock a filesystem?
-    var repos = try findRepos(arena_allocator, "/home/nhanb/pj/");
+    const repos = try findRepos(arena_allocator, "/home/nhanb/pj/");
 
     //std.debug.print("\n", .{});
     //for (repos) |path| {
@@ -56,7 +56,7 @@ pub const Commit = struct {
 };
 
 pub fn listCommits(allocator: std.mem.Allocator, absolute_path: []const u8) ![]Commit {
-    var result = try std.ChildProcess.exec(.{
+    const result = try std.ChildProcess.run(.{
         .allocator = allocator,
         .argv = &.{
             "git",
@@ -86,12 +86,12 @@ pub fn listCommits(allocator: std.mem.Allocator, absolute_path: []const u8) ![]C
 }
 
 test "listCommits" {
-    var test_alloc = std.testing.allocator;
+    const test_alloc = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(test_alloc);
     defer arena.deinit();
 
     // TODO: how do I mock a ChilProcess's result?
-    var commits = try listCommits(arena.allocator(), "/home/nhanb/pj/boast");
+    const commits = try listCommits(arena.allocator(), "/home/nhanb/pj/boast");
     //for (commits) |c| {
     //    std.debug.print("{s} - {s} - {s}\n", .{ c.hash, c.date, c.subject });
     //}

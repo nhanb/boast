@@ -94,7 +94,7 @@ pub fn Builder(comptime WriterT: type, comptime pretty: bool) type {
         // Crashing during a write isn't ideal either, because that rules out writing to a network
         // writer. Is there a better way?
         pub fn close(self: *@This()) void {
-            var tag = self.tag_stack.pop();
+            const tag = self.tag_stack.pop();
             self.indent() catch unreachable;
             self.writer.writeAll("</") catch unreachable;
             self.writer.writeAll(tag) catch unreachable;
@@ -139,7 +139,7 @@ const void_tags = &[_][]const u8{
 };
 
 test "Builder" {
-    var test_allocator = std.testing.allocator;
+    const test_allocator = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(test_allocator);
 
     var output = std.ArrayList(u8).init(test_allocator);

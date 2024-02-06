@@ -146,36 +146,39 @@ pub fn writeCommit(
     commit_hash: []const u8,
 ) !void {
     print("commit: {s}\n", .{commit_hash});
-    var git_result = try std.ChildProcess.exec(.{
+    const git_result = try std.ChildProcess.run(.{
         .allocator = aa,
         .argv = &.{ "git", "show", "--color", commit_hash },
         .cwd = repo_path,
         .max_output_bytes = 1024 * 1024 * 1024,
     });
-    try writer.writeAll(git_result.stdout);
+    //try writer.writeAll(git_result.stdout);
 
-    //var cp = std.ChildProcess.init(&.{"aha"}, aa);
-    //cp.stdin_behavior = .Pipe;
-    //cp.stdout_behavior = .Pipe;
-    //cp.stderr_behavior = .Pipe;
+    var cp = std.ChildProcess.init(&.{"aha"}, aa);
+    cp.stdin_behavior = .Pipe;
+    cp.stdout_behavior = .Pipe;
+    cp.stderr_behavior = .Pipe;
 
-    //var stdout = std.ArrayList(u8).init(aa);
-    //var stderr = std.ArrayList(u8).init(aa);
+    var stdout = std.ArrayList(u8).init(aa);
+    var stderr = std.ArrayList(u8).init(aa);
 
-    //print("spawning\n", .{});
-    //try cp.spawn();
+    print("spawning\n", .{});
+    try cp.spawn();
 
-    //print("writing\n", .{});
+    print("writing {d}K\n", .{git_result.stdout.len / 1024});
     //print("{s}\n", .{git_result.stdout});
-    //try cp.stdin.?.writeAll(git_result.stdout);
-    //print("closing\n", .{});
-    //cp.stdin.?.close();
-    //cp.stdin = null;
-    //print("collecting\n", .{});
-    //try cp.collectOutput(&stdout, &stderr, 1024 * 1024 * 1024);
-    //_ = try cp.wait();
+    //var blob: [1024 * 134]u8 = undefined;
+    //@memset(&blob, 'a');
+    //try cp.stdin.?.writeAll(&blob);
+    try cp.stdin.?.writeAll(git_result.stdout);
+    print("closing\n", .{});
+    cp.stdin.?.close();
+    cp.stdin = null;
+    print("collecting\n", .{});
+    try cp.collectOutput(&stdout, &stderr, 1024 * 1024 * 1024);
+    _ = try cp.wait();
 
-    //try writer.writeAll(try stdout.toOwnedSlice());
+    try writer.writeAll(try stdout.toOwnedSlice());
 }
 
 test "index and repos" {
@@ -191,7 +194,7 @@ test "index and repos" {
         else => return err,
     };
 
-    var repos = try git.findRepos(arena_alloc, repos_path);
+    const repos = try git.findRepos(arena_alloc, repos_path);
     var output = std.ArrayList(u8).init(arena_alloc);
     try writeIndex(std.ArrayList(u8).Writer, arena_alloc, output.writer(), repos);
 
@@ -214,7 +217,7 @@ test "index and repos" {
             else => return err,
         };
 
-        var commits = try git.listCommits(raa, repo_path);
+        const commits = try git.listCommits(raa, repo_path);
 
         {
             // Create repo index file
