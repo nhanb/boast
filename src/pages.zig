@@ -98,7 +98,20 @@ pub fn repo_index(
                 try h.text("/");
                 try h.text(repo_name);
             }
+
             try h.open("hr", null);
+
+            {
+                try h.open("p", null);
+                defer h.close();
+                {
+                    try h.open("b", null);
+                    defer h.close();
+                    try h.text(try std.fmt.allocPrint(aa, "{d}", .{commits.len}));
+                }
+                try h.text(" commits:");
+            }
+
             {
                 try h.open("ul", null);
                 defer h.close();
