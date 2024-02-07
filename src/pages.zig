@@ -4,11 +4,7 @@ const git = @import("./git.zig");
 
 const concat = std.mem.concat;
 const Allocator = std.mem.Allocator;
-const ArenaAllocator = std.heap.ArenaAllocator;
-const fs = std.fs;
-const print = std.debug.print;
 const allocPrint = std.fmt.allocPrint;
-const path_sep = std.fs.path.sep_str;
 
 pub fn writeIndex(
     comptime WriterT: type,
@@ -121,7 +117,7 @@ pub fn writeRepoIndex(
                 for (commits) |commit| {
                     try h.open("li", null);
                     defer h.close();
-                    try h.text(commit.hash);
+                    try h.text(commit.hash[0..10]);
                     try h.text(" | ");
                     try h.text(commit.date);
                     try h.text(" | ");
@@ -141,18 +137,28 @@ pub fn writeRepoIndex(
 
 pub fn writeCommit(
     aa: Allocator,
-    writer: anytype,
+    text_writer: anytype,
+    html_writer: anytype,
     repo_path: []const u8,
     commit_hash: []const u8,
 ) !void {
-    //print("commit: {s}\n", .{commit_hash});
-    const git_result = try std.ChildProcess.run(.{
+    // Plaintext diff
+    const text_diff = (try std.ChildProcess.run(.{
+        .allocator = aa,
+        .argv = &.{ "git", "show", commit_hash },
+        .cwd = repo_path,
+        .max_output_bytes = 1024 * 1024 * 1024,
+    })).stdout;
+    try text_writer.writeAll(text_diff);
+
+    // HTML diff requires piping git's colored result to `aha`
+
+    const html_diff = (try std.ChildProcess.run(.{
         .allocator = aa,
         .argv = &.{ "git", "show", "--color", commit_hash },
         .cwd = repo_path,
         .max_output_bytes = 1024 * 1024 * 1024,
-    });
-    //try writer.writeAll(git_result.stdout);
+    })).stdout;
 
     var cp = std.ChildProcess.init(&.{"aha"}, aa);
     cp.stdin_behavior = .Pipe;
@@ -167,97 +173,16 @@ pub fn writeCommit(
     // Concurrently drain aha's stdout so it doesn't deadlock on stdin
     const thread = try std.Thread.spawn(.{}, drainStdout, .{ &cp, &stdout, &stderr });
 
-    //print("writing {d}K\n", .{git_result.stdout.len / 1024});
-    try cp.stdin.?.writeAll(git_result.stdout);
+    try cp.stdin.?.writeAll(html_diff);
     cp.stdin.?.close();
     cp.stdin = null;
 
     thread.join();
     _ = try cp.wait();
 
-    try writer.writeAll(try stdout.toOwnedSlice());
+    try html_writer.writeAll(try stdout.toOwnedSlice());
 }
 
 fn drainStdout(c: *std.ChildProcess, stdout: anytype, stderr: anytype) !void {
     try c.collectOutput(stdout, stderr, 1024 * 1024 * 1024);
-}
-
-test "index and repos" {
-    var arena = ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arena_alloc = arena.allocator();
-
-    const repos_path = "/home/nhanb/pj";
-    const output_path = "/home/nhanb/pj/boast/boast-out";
-
-    fs.makeDirAbsolute(output_path) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => return err,
-    };
-
-    const repos = try git.findRepos(arena_alloc, repos_path);
-    var output = std.ArrayList(u8).init(arena_alloc);
-    try writeIndex(std.ArrayList(u8).Writer, arena_alloc, output.writer(), repos);
-
-    const index_path = try fs.path.join(arena_alloc, &.{ output_path, "index.html" });
-    const file = try std.fs.createFileAbsolute(index_path, .{});
-    defer file.close();
-    try file.writeAll(output.items);
-
-    for (repos) |repo| {
-        var repo_arena = ArenaAllocator.init(std.testing.allocator);
-        defer repo_arena.deinit();
-        const raa = repo_arena.allocator();
-
-        const repo_path = try fs.path.join(raa, &.{ repos_path, repo });
-
-        // Make sure output dir exists
-        const out_repo_path = try fs.path.join(raa, &.{ output_path, repo });
-        fs.makeDirAbsolute(out_repo_path) catch |err| switch (err) {
-            error.PathAlreadyExists => {},
-            else => return err,
-        };
-
-        const commits = try git.listCommits(raa, repo_path);
-
-        {
-            // Create repo index file
-            const file_path = try fs.path.join(raa, &.{ out_repo_path, "index.html" });
-            print("file: {s}\n", .{file_path});
-            const repo_index_file = try std.fs.createFileAbsolute(file_path, .{});
-            defer repo_index_file.close();
-            var repo_index_content = std.ArrayList(u8).init(raa);
-            try writeRepoIndex(
-                std.ArrayList(u8).Writer,
-                raa,
-                repo_index_content.writer(),
-                repo,
-                commits,
-            );
-            try repo_index_file.writeAll(repo_index_content.items);
-        }
-
-        // Create commit files
-        const commits_dir_path = try fs.path.join(raa, &.{ out_repo_path, "commits" });
-        fs.makeDirAbsolute(commits_dir_path) catch |err| switch (err) {
-            error.PathAlreadyExists => {},
-            else => return err,
-        };
-        for (commits) |commit| {
-            const commit_file_path = try concat(raa, u8, &.{
-                commits_dir_path,
-                path_sep,
-                commit.hash,
-                ".html",
-            });
-            const commit_file = try std.fs.createFileAbsolute(commit_file_path, .{});
-            defer commit_file.close();
-            try writeCommit(
-                raa,
-                commit_file,
-                repo_path,
-                commit.hash,
-            );
-        }
-    }
 }
