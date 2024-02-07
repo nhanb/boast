@@ -36,72 +36,87 @@ pub fn main() !void {
     defer file.close();
     try pages.writeIndex(std.fs.File.Writer, arena_alloc, file.writer(), repos);
 
+    var thread_pool: std.Thread.Pool = undefined;
+    try thread_pool.init(.{ .allocator = arena_alloc });
+    defer thread_pool.deinit();
+
     for (repos) |repo| {
-        print("Repo {s}...", .{repo});
-        var repo_timer = try std.time.Timer.start();
-        defer print(" took {d}ms\n", .{repo_timer.read() / 1000 / 1000});
+        try processRepo(repos_path, output_path, repo);
+    }
+}
 
-        var repo_arena = ArenaAllocator.init(gpa_alloc);
-        defer repo_arena.deinit();
-        const raa = repo_arena.allocator();
+fn processRepo(
+    repos_path: []const u8,
+    output_path: []const u8,
+    repo: []const u8,
+) !void {
+    print("Repo {s}...", .{repo});
+    var repo_timer = try std.time.Timer.start();
+    defer print(" took {d}ms\n", .{repo_timer.read() / 1000 / 1000});
 
-        const repo_path = try fs.path.join(raa, &.{ repos_path, repo });
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa_alloc = gpa.allocator();
+    defer if (gpa.deinit() == .leak) @panic("Memory leaked.");
+    var repo_arena = ArenaAllocator.init(gpa_alloc);
+    defer repo_arena.deinit();
+    const raa = repo_arena.allocator();
 
-        // Make sure output dir exists
-        const out_repo_path = try fs.path.join(raa, &.{ output_path, repo });
-        fs.makeDirAbsolute(out_repo_path) catch |err| switch (err) {
-            error.PathAlreadyExists => {},
-            else => return err,
-        };
+    const repo_path = try fs.path.join(raa, &.{ repos_path, repo });
 
-        const commits = try git.listCommits(raa, repo_path);
+    // Make sure output dir exists
+    const out_repo_path = try fs.path.join(raa, &.{ output_path, repo });
+    fs.makeDirAbsolute(out_repo_path) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
 
-        {
-            // Create repo index file
-            const file_path = try fs.path.join(raa, &.{ out_repo_path, "index.html" });
-            const repo_index_file = try std.fs.createFileAbsolute(file_path, .{});
-            defer repo_index_file.close();
-            try pages.writeRepoIndex(
-                std.fs.File.Writer,
-                raa,
-                repo_index_file.writer(),
-                repo,
-                commits,
-            );
-        }
+    const commits = try git.listCommits(raa, repo_path);
 
-        // Create commit files
-        const commits_dir_path = try fs.path.join(raa, &.{ out_repo_path, "commits" });
-        fs.makeDirAbsolute(commits_dir_path) catch |err| switch (err) {
-            error.PathAlreadyExists => {},
-            else => return err,
-        };
-        for (commits) |commit| {
-            const text_file_path = try concat(raa, u8, &.{
-                commits_dir_path,
-                path_sep,
-                commit.hash,
-                ".patch",
-            });
-            const text_file = try std.fs.createFileAbsolute(text_file_path, .{});
-            defer text_file.close();
+    {
+        // Create repo index file
+        const file_path = try fs.path.join(raa, &.{ out_repo_path, "index.html" });
+        const repo_index_file = try std.fs.createFileAbsolute(file_path, .{});
+        defer repo_index_file.close();
+        try pages.writeRepoIndex(
+            std.fs.File.Writer,
+            raa,
+            repo_index_file.writer(),
+            repo,
+            commits,
+        );
+    }
 
-            const html_file_path = try concat(raa, u8, &.{
-                commits_dir_path,
-                path_sep,
-                commit.hash,
-                ".html",
-            });
-            const html_file = try std.fs.createFileAbsolute(html_file_path, .{});
-            defer html_file.close();
+    // Create commit files
+    const commits_dir_path = try fs.path.join(raa, &.{ out_repo_path, "commits" });
+    fs.makeDirAbsolute(commits_dir_path) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+    for (commits) |commit| {
+        const text_file_path = try concat(raa, u8, &.{
+            commits_dir_path,
+            path_sep,
+            commit.hash,
+            ".patch",
+        });
+        const text_file = try std.fs.createFileAbsolute(text_file_path, .{});
+        defer text_file.close();
 
-            try pages.writeCommit(
-                raa,
-                text_file,
-                html_file,
-                repo_path,
-                commit.hash,
-            );
-        }
+        const html_file_path = try concat(raa, u8, &.{
+            commits_dir_path,
+            path_sep,
+            commit.hash,
+            ".html",
+        });
+        const html_file = try std.fs.createFileAbsolute(html_file_path, .{});
+        defer html_file.close();
+
+        try pages.writeCommit(
+            raa,
+            text_file,
+            html_file,
+            repo_path,
+            commit.hash,
+        );
     }
 }
