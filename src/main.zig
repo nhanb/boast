@@ -36,12 +36,13 @@ pub fn main() !void {
     defer file.close();
     try pages.writeIndex(std.fs.File.Writer, arena_alloc, file.writer(), repos);
 
+    // Write repo commits
+    print("Thread count: {d}\n", .{try std.Thread.getCpuCount()});
     var thread_pool: std.Thread.Pool = undefined;
-    try thread_pool.init(.{ .allocator = arena_alloc });
+    try thread_pool.init(.{ .allocator = arena_alloc, .n_jobs = 1 }); // FIXME
     defer thread_pool.deinit();
-
     for (repos) |repo| {
-        try processRepo(repos_path, output_path, repo);
+        try thread_pool.spawn(processRepo, .{ repos_path, output_path, repo });
     }
 }
 
@@ -49,10 +50,10 @@ fn processRepo(
     repos_path: []const u8,
     output_path: []const u8,
     repo: []const u8,
-) !void {
-    print("Repo {s}...", .{repo});
-    var repo_timer = try std.time.Timer.start();
-    defer print(" took {d}ms\n", .{repo_timer.read() / 1000 / 1000});
+) void {
+    print("Repo {s}...\n", .{repo});
+    var repo_timer = std.time.Timer.start() catch unreachable;
+    defer print(">> {s} took {d}ms\n", .{ repo, repo_timer.read() / 1000 / 1000 });
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_alloc = gpa.allocator();
@@ -61,62 +62,62 @@ fn processRepo(
     defer repo_arena.deinit();
     const raa = repo_arena.allocator();
 
-    const repo_path = try fs.path.join(raa, &.{ repos_path, repo });
+    const repo_path = fs.path.join(raa, &.{ repos_path, repo }) catch unreachable;
 
     // Make sure output dir exists
-    const out_repo_path = try fs.path.join(raa, &.{ output_path, repo });
+    const out_repo_path = fs.path.join(raa, &.{ output_path, repo }) catch unreachable;
     fs.makeDirAbsolute(out_repo_path) catch |err| switch (err) {
         error.PathAlreadyExists => {},
-        else => return err,
+        else => unreachable,
     };
 
-    const commits = try git.listCommits(raa, repo_path);
+    const commits = git.listCommits(raa, repo_path) catch unreachable;
 
     {
         // Create repo index file
-        const file_path = try fs.path.join(raa, &.{ out_repo_path, "index.html" });
-        const repo_index_file = try std.fs.createFileAbsolute(file_path, .{});
+        const file_path = fs.path.join(raa, &.{ out_repo_path, "index.html" }) catch unreachable;
+        const repo_index_file = std.fs.createFileAbsolute(file_path, .{}) catch unreachable;
         defer repo_index_file.close();
-        try pages.writeRepoIndex(
+        pages.writeRepoIndex(
             std.fs.File.Writer,
             raa,
             repo_index_file.writer(),
             repo,
             commits,
-        );
+        ) catch unreachable;
     }
 
     // Create commit files
-    const commits_dir_path = try fs.path.join(raa, &.{ out_repo_path, "commits" });
+    const commits_dir_path = fs.path.join(raa, &.{ out_repo_path, "commits" }) catch unreachable;
     fs.makeDirAbsolute(commits_dir_path) catch |err| switch (err) {
         error.PathAlreadyExists => {},
-        else => return err,
+        else => unreachable,
     };
     for (commits) |commit| {
-        const text_file_path = try concat(raa, u8, &.{
+        const text_file_path = concat(raa, u8, &.{
             commits_dir_path,
             path_sep,
             commit.hash,
             ".patch",
-        });
-        const text_file = try std.fs.createFileAbsolute(text_file_path, .{});
+        }) catch unreachable;
+        const text_file = std.fs.createFileAbsolute(text_file_path, .{}) catch unreachable;
         defer text_file.close();
 
-        const html_file_path = try concat(raa, u8, &.{
+        const html_file_path = concat(raa, u8, &.{
             commits_dir_path,
             path_sep,
             commit.hash,
             ".html",
-        });
-        const html_file = try std.fs.createFileAbsolute(html_file_path, .{});
+        }) catch unreachable;
+        const html_file = std.fs.createFileAbsolute(html_file_path, .{}) catch unreachable;
         defer html_file.close();
 
-        try pages.writeCommit(
+        pages.writeCommit(
             raa,
             text_file,
             html_file,
             repo_path,
             commit.hash,
-        );
+        ) catch unreachable;
     }
 }
