@@ -46,7 +46,7 @@ pub fn writeIndex(
                     try h.open("li", null);
                     defer h.close();
                     {
-                        try h.open("a", .{ .href = try concat(aa, u8, &.{ "./", repo, "/index.html" }) });
+                        try h.open("a", .{ .href = try concat(aa, u8, &.{ "./", repo, "/" }) });
                         defer h.close();
                         try h.text(repo);
                     }
@@ -89,7 +89,7 @@ pub fn writeRepoIndex(
                 try h.open("strong", null);
                 defer h.close();
                 {
-                    try h.open("a", .{ .href = "../index.html" });
+                    try h.open("a", .{ .href = "../" });
                     defer h.close();
                     try h.text("Repos");
                 }
@@ -98,6 +98,17 @@ pub fn writeRepoIndex(
             }
 
             try h.open("hr", null);
+
+            {
+                try h.open("p", null);
+                defer h.close();
+                try h.text("To clone this repo, run ");
+                {
+                    try h.open("code", .{ .style = "background-color: gainsboro; padding: 4px;" });
+                    defer h.close();
+                    try h.text("git clone <this-url>");
+                }
+            }
 
             {
                 try h.open("p", null);
@@ -181,13 +192,13 @@ pub fn writeCommit(
                 try h.open("strong", null);
                 defer h.close();
                 {
-                    try h.open("a", .{ .href = "../../index.html" });
+                    try h.open("a", .{ .href = "../../" });
                     defer h.close();
                     try h.text("Repos");
                 }
                 try h.text(" / ");
                 {
-                    try h.open("a", .{ .href = "../index.html" });
+                    try h.open("a", .{ .href = "../" });
                     defer h.close();
                     try h.text(repo_name);
                 }

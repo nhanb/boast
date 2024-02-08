@@ -30,21 +30,19 @@ pub fn main() !void {
         std.os.exit(1);
     }
 
-    const cwd = fs.cwd();
-    const repos_path = try cwd.realpathAlloc(arena_alloc, args[1]);
-    const output_path = try cwd.realpathAlloc(arena_alloc, args[2]);
-    print("Source: {s}\n", .{repos_path});
-    print("Dest:   {s}\n", .{output_path});
-
-    fs.makeDirAbsolute(output_path) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => return err,
-    };
+    var src_dir = try fs.cwd().openDir(args[1], .{});
+    defer src_dir.close();
+    var dest_dir = try fs.cwd().makeOpenPath(args[2], .{});
+    defer dest_dir.close();
+    const src_abs_path = try src_dir.realpathAlloc(arena_alloc, ".");
+    const dest_abs_path = try dest_dir.realpathAlloc(arena_alloc, ".");
+    print("Source: {s}\n", .{src_abs_path});
+    print("Dest  : {s}\n", .{dest_abs_path});
 
     // Write repos index
-    const repos = try git.findRepos(arena_alloc, repos_path);
+    const repos = try git.findRepos(arena_alloc, src_abs_path);
     print("Found {d} repos\n", .{repos.len});
-    const index_path = try fs.path.join(arena_alloc, &.{ output_path, "index.html" });
+    const index_path = try fs.path.join(arena_alloc, &.{ dest_abs_path, "index.html" });
     const file = try fs.createFileAbsolute(index_path, .{});
     defer file.close();
     try pages.writeIndex(arena_alloc, file.writer(), repos);
@@ -54,7 +52,7 @@ pub fn main() !void {
     try thread_pool.init(.{ .allocator = arena_alloc, .n_jobs = num_concurrent_repos });
     defer thread_pool.deinit();
     for (repos) |repo| {
-        try thread_pool.spawn(processRepo, .{ repos_path, output_path, repo });
+        try thread_pool.spawn(processRepo, .{ src_abs_path, dest_abs_path, repo });
     }
 }
 
@@ -96,6 +94,55 @@ fn processRepo(
             repo,
             commits,
         ) catch unreachable;
+    }
+
+    {
+        // Prepare data for git clones over dumb http protocol
+
+        // Generate [.git/]info/refs in source repo
+        _ = std.ChildProcess.run(.{
+            .allocator = raa,
+            .argv = &.{ "git", "update-server-info" },
+            .cwd = repo_path,
+        }) catch unreachable;
+
+        // Copy over just the necessary data:
+        // - info/refs
+        // - objects/
+        // - HEAD
+
+        var src_repo_path = repo_path;
+        if (!std.mem.endsWith(u8, repo_path, ".git")) {
+            src_repo_path = fs.path.join(raa, &.{ src_repo_path, ".git" }) catch unreachable;
+        }
+
+        const src_dir = fs.openDirAbsolute(src_repo_path, .{ .iterate = true }) catch unreachable;
+        const dest_dir = fs.openDirAbsolute(out_repo_path, .{ .iterate = true }) catch unreachable;
+
+        dest_dir.makePath("info") catch unreachable;
+
+        const refs_path = fs.path.join(raa, &.{ "info", "refs" }) catch unreachable;
+        src_dir.copyFile(refs_path, dest_dir, refs_path, .{}) catch unreachable;
+
+        src_dir.copyFile("HEAD", dest_dir, "HEAD", .{}) catch unreachable;
+
+        const src_objects_dir = src_dir.openDir("objects", .{ .iterate = true }) catch unreachable;
+        const dest_objects_dir = dest_dir.makeOpenPath("objects", .{}) catch unreachable;
+
+        var walker = src_objects_dir.walk(raa) catch unreachable;
+        defer walker.deinit();
+
+        while (walker.next() catch unreachable) |entry| {
+            switch (entry.kind) {
+                .file => {
+                    entry.dir.copyFile(entry.basename, dest_objects_dir, entry.path, .{}) catch unreachable;
+                },
+                .directory => {
+                    dest_objects_dir.makePath(entry.path) catch unreachable;
+                },
+                else => unreachable,
+            }
+        }
     }
 
     // Create commit files
