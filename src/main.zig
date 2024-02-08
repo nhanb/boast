@@ -23,8 +23,18 @@ pub fn main() !void {
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
-    const repos_path = "/home/nhanb/pj/boast/boast-repos";
-    const output_path = "/home/nhanb/pj/boast/boast-out";
+    const args = try std.process.argsAlloc(arena_alloc);
+    defer std.process.argsFree(arena_alloc, args);
+    if (args.len != 3) {
+        print("Usage: boast <repos-path> <output-path>\n", .{});
+        std.os.exit(1);
+    }
+
+    const cwd = fs.cwd();
+    const repos_path = try cwd.realpathAlloc(arena_alloc, args[1]);
+    const output_path = try cwd.realpathAlloc(arena_alloc, args[2]);
+    print("Source: {s}\n", .{repos_path});
+    print("Dest:   {s}\n", .{output_path});
 
     fs.makeDirAbsolute(output_path) catch |err| switch (err) {
         error.PathAlreadyExists => {},
@@ -33,7 +43,7 @@ pub fn main() !void {
 
     // Write repos index
     const repos = try git.findRepos(arena_alloc, repos_path);
-    print("Processing {d} repos at {s}\n", .{ repos.len, repos_path });
+    print("Found {d} repos\n", .{repos.len});
     const index_path = try fs.path.join(arena_alloc, &.{ output_path, "index.html" });
     const file = try fs.createFileAbsolute(index_path, .{});
     defer file.close();

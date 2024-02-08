@@ -2,7 +2,10 @@ build:
 	zig build
 
 watch:
-	find ./src -name '*.zig' | entr -rc zig build run
+	find . -name '*.zig' | \
+		entr -rc zig build run -- \
+		boast-repos \
+		boast-out
 
 serve:
 	python -m http.server -b 127.0.0.1 -d ./boast-out
