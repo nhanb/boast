@@ -6,24 +6,24 @@ const concat = std.mem.concat;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const fs = std.fs;
 const print = std.debug.print;
-const path_sep = std.fs.path.sep_str;
 
 var cpu_count: usize = undefined;
 const num_concurrent_repos = 2;
 
 pub fn main() !void {
+    var timer = try std.time.Timer.start();
+    defer print("Everything took {d}s\n", .{timer.read() / 1_000_000_000});
+
     cpu_count = std.Thread.getCpuCount() catch unreachable;
 
-    // Init arena allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_alloc = gpa.allocator();
     defer if (gpa.deinit() == .leak) @panic("Memory leaked.");
-
     var arena = ArenaAllocator.init(gpa_alloc);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
-    const repos_path = "/home/nhanb/all-repos";
+    const repos_path = "/home/nhanb/pj/boast/boast-repos";
     const output_path = "/home/nhanb/pj/boast/boast-out";
 
     fs.makeDirAbsolute(output_path) catch |err| switch (err) {
@@ -31,14 +31,11 @@ pub fn main() !void {
         else => return err,
     };
 
-    var timer = try std.time.Timer.start();
-    defer print("Everything took {d}s\n", .{timer.read() / 1000 / 1000 / 1000});
-
     // Write repos index
     const repos = try git.findRepos(arena_alloc, repos_path);
     print("Processing {d} repos at {s}\n", .{ repos.len, repos_path });
     const index_path = try fs.path.join(arena_alloc, &.{ output_path, "index.html" });
-    const file = try std.fs.createFileAbsolute(index_path, .{});
+    const file = try fs.createFileAbsolute(index_path, .{});
     defer file.close();
     try pages.writeIndex(arena_alloc, file.writer(), repos);
 
@@ -81,7 +78,7 @@ fn processRepo(
     {
         // Create repo index file
         const file_path = fs.path.join(raa, &.{ out_repo_path, "index.html" }) catch unreachable;
-        const repo_index_file = std.fs.createFileAbsolute(file_path, .{}) catch unreachable;
+        const repo_index_file = fs.createFileAbsolute(file_path, .{}) catch unreachable;
         defer repo_index_file.close();
         pages.writeRepoIndex(
             raa,
@@ -125,11 +122,11 @@ fn processCommit(
 
     const file_path = concat(aa, u8, &.{
         commits_dir_path,
-        path_sep,
+        fs.path.sep_str,
         commit.hash,
         ".html",
     }) catch unreachable;
-    const file = std.fs.createFileAbsolute(file_path, .{}) catch unreachable;
+    const file = fs.createFileAbsolute(file_path, .{}) catch unreachable;
     defer file.close();
 
     pages.writeCommit(
