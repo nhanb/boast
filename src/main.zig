@@ -34,10 +34,9 @@ pub fn main() !void {
     const index_path = try fs.path.join(arena_alloc, &.{ output_path, "index.html" });
     const file = try std.fs.createFileAbsolute(index_path, .{});
     defer file.close();
-    try pages.writeIndex(std.fs.File.Writer, arena_alloc, file.writer(), repos);
+    try pages.writeIndex(arena_alloc, file.writer(), repos);
 
     // Write repo commits
-    print("Thread count: {d}\n", .{try std.Thread.getCpuCount()});
     var thread_pool: std.Thread.Pool = undefined;
     try thread_pool.init(.{ .allocator = arena_alloc, .n_jobs = 1 }); // FIXME
     defer thread_pool.deinit();
@@ -79,7 +78,6 @@ fn processRepo(
         const repo_index_file = std.fs.createFileAbsolute(file_path, .{}) catch unreachable;
         defer repo_index_file.close();
         pages.writeRepoIndex(
-            std.fs.File.Writer,
             raa,
             repo_index_file.writer(),
             repo,

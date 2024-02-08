@@ -7,12 +7,11 @@ const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 
 pub fn writeIndex(
-    comptime WriterT: type,
     aa: Allocator,
-    writer: WriterT,
+    writer: anytype,
     repos: [][]const u8,
 ) !void {
-    var h = html.Builder(WriterT, true).init(aa, writer);
+    var h = html.Builder(@TypeOf(writer), true).init(aa, writer);
     try h.doctype();
     {
         try h.open("html", .{ .lang = "en", .style = "font-family: monospace;" });
@@ -58,13 +57,12 @@ pub fn writeIndex(
 }
 
 pub fn writeRepoIndex(
-    comptime WriterT: type,
     aa: Allocator,
-    writer: WriterT,
+    writer: anytype,
     repo_name: []const u8,
     commits: []git.Commit,
 ) !void {
-    var h = html.Builder(WriterT, false).init(aa, writer);
+    var h = html.Builder(@TypeOf(writer), false).init(aa, writer);
     try h.doctype();
     {
         try h.open("html", .{ .lang = "en", .style = "font-family: monospace;" });
