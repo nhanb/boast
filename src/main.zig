@@ -18,7 +18,7 @@ pub fn main() !void {
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
-    const repos_path = "/home/nhanb/pj/boast/boast-repos";
+    const repos_path = "/home/nhanb/pj/";
     const output_path = "/home/nhanb/pj/boast/boast-out";
 
     fs.makeDirAbsolute(output_path) catch |err| switch (err) {
@@ -31,6 +31,7 @@ pub fn main() !void {
 
     // Write repos index
     const repos = try git.findRepos(arena_alloc, repos_path);
+    print("Processing {d} repos at {s}\n", .{ repos.len, repos_path });
     const index_path = try fs.path.join(arena_alloc, &.{ output_path, "index.html" });
     const file = try std.fs.createFileAbsolute(index_path, .{});
     defer file.close();
@@ -38,7 +39,7 @@ pub fn main() !void {
 
     // Write repo commits
     var thread_pool: std.Thread.Pool = undefined;
-    try thread_pool.init(.{ .allocator = arena_alloc, .n_jobs = 1 }); // FIXME
+    try thread_pool.init(.{ .allocator = arena_alloc });
     defer thread_pool.deinit();
     for (repos) |repo| {
         try thread_pool.spawn(processRepo, .{ repos_path, output_path, repo });
@@ -50,7 +51,7 @@ fn processRepo(
     output_path: []const u8,
     repo: []const u8,
 ) void {
-    print("Repo {s}...\n", .{repo});
+    //print("Repo {s}...\n", .{repo});
     var repo_timer = std.time.Timer.start() catch unreachable;
     defer print(">> {s} took {d}ms\n", .{ repo, repo_timer.read() / 1000 / 1000 });
 
@@ -92,30 +93,20 @@ fn processRepo(
         else => unreachable,
     };
     for (commits) |commit| {
-        const text_file_path = concat(raa, u8, &.{
-            commits_dir_path,
-            path_sep,
-            commit.hash,
-            ".patch",
-        }) catch unreachable;
-        const text_file = std.fs.createFileAbsolute(text_file_path, .{}) catch unreachable;
-        defer text_file.close();
-
-        const html_file_path = concat(raa, u8, &.{
+        const file_path = concat(raa, u8, &.{
             commits_dir_path,
             path_sep,
             commit.hash,
             ".html",
         }) catch unreachable;
-        const html_file = std.fs.createFileAbsolute(html_file_path, .{}) catch unreachable;
-        defer html_file.close();
+        const file = std.fs.createFileAbsolute(file_path, .{}) catch unreachable;
+        defer file.close();
 
         pages.writeCommit(
             raa,
-            text_file,
-            html_file,
+            file,
             repo_path,
-            commit.hash,
+            commit,
         ) catch unreachable;
     }
 }

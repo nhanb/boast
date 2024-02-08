@@ -34,7 +34,7 @@ pub fn writeIndex(
             try h.open("body", null);
             defer h.close();
             {
-                try h.open("h2", null);
+                try h.open("strong", null);
                 defer h.close();
                 try h.text("Repos");
             }
@@ -74,6 +74,7 @@ pub fn writeRepoIndex(
                 try h.open("title", null);
                 defer h.close();
                 try h.text(repo_name);
+                try h.text(" | Boast");
             }
             try h.open("meta", .{ .charset = "utf-8" });
             try h.open("meta", .{
@@ -85,14 +86,14 @@ pub fn writeRepoIndex(
             try h.open("body", null);
             defer h.close();
             {
-                try h.open("h2", null);
+                try h.open("strong", null);
                 defer h.close();
                 {
                     try h.open("a", .{ .href = "../index.html" });
                     defer h.close();
                     try h.text("Repos");
                 }
-                try h.text("/");
+                try h.text(" / ");
                 try h.text(repo_name);
             }
 
@@ -135,52 +136,72 @@ pub fn writeRepoIndex(
 
 pub fn writeCommit(
     aa: Allocator,
-    text_writer: anytype,
-    html_writer: anytype,
+    writer: anytype,
     repo_path: []const u8,
-    commit_hash: []const u8,
+    commit: git.Commit,
 ) !void {
-    // Plaintext diff
     const text_diff = (try std.ChildProcess.run(.{
         .allocator = aa,
-        .argv = &.{ "git", "show", commit_hash },
-        .cwd = repo_path,
-        .max_output_bytes = 1024 * 1024 * 1024,
-    })).stdout;
-    try text_writer.writeAll(text_diff);
-
-    // HTML diff requires piping git's colored result to `aha`
-
-    const html_diff = (try std.ChildProcess.run(.{
-        .allocator = aa,
-        .argv = &.{ "git", "show", "--color", commit_hash },
+        .argv = &.{ "git", "show", commit.hash },
         .cwd = repo_path,
         .max_output_bytes = 1024 * 1024 * 1024,
     })).stdout;
 
-    var cp = std.ChildProcess.init(&.{"aha"}, aa);
-    cp.stdin_behavior = .Pipe;
-    cp.stdout_behavior = .Pipe;
-    cp.stderr_behavior = .Pipe;
+    const repo_name = std.fs.path.basename(repo_path);
 
-    var stdout = std.ArrayList(u8).init(aa);
-    var stderr = std.ArrayList(u8).init(aa);
+    var h = html.Builder(@TypeOf(writer), false).init(aa, writer);
+    try h.doctype();
+    {
+        try h.open("html", .{ .lang = "en", .style = "font-family: monospace;" });
+        defer h.close();
+        {
+            try h.open("head", null);
+            defer h.close();
+            {
+                try h.open("title", null);
+                defer h.close();
+                try h.text("[");
+                try h.text(commit.hash[0..10]);
+                try h.text("] ");
+                try h.text(commit.subject);
+                try h.text(" | ");
+                try h.text(repo_name);
+                try h.text(" | Boast");
+            }
+            try h.open("meta", .{ .charset = "utf-8" });
+            try h.open("meta", .{
+                .name = "viewport",
+                .content = "width=device-width, initial-scale=1.0",
+            });
+        }
+        {
+            try h.open("body", null);
+            defer h.close();
+            {
+                try h.open("strong", null);
+                defer h.close();
+                {
+                    try h.open("a", .{ .href = "../../index.html" });
+                    defer h.close();
+                    try h.text("Repos");
+                }
+                try h.text(" / ");
+                {
+                    try h.open("a", .{ .href = "../index.html" });
+                    defer h.close();
+                    try h.text(repo_name);
+                }
+                try h.text(" / ");
+                try h.text(commit.hash[0..10]);
+            }
 
-    try cp.spawn();
+            try h.open("hr", null);
 
-    // Concurrently drain aha's stdout so it doesn't deadlock on stdin
-    const thread = try std.Thread.spawn(.{}, drainStdout, .{ &cp, &stdout, &stderr });
-
-    try cp.stdin.?.writeAll(html_diff);
-    cp.stdin.?.close();
-    cp.stdin = null;
-
-    thread.join();
-    _ = try cp.wait();
-
-    try html_writer.writeAll(try stdout.toOwnedSlice());
-}
-
-fn drainStdout(c: *std.ChildProcess, stdout: anytype, stderr: anytype) !void {
-    try c.collectOutput(stdout, stderr, 1024 * 1024 * 1024);
+            {
+                try h.open("pre", null);
+                defer h.close();
+                try h.text(text_diff);
+            }
+        }
+    }
 }
