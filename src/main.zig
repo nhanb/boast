@@ -8,7 +8,12 @@ const fs = std.fs;
 const print = std.debug.print;
 const path_sep = std.fs.path.sep_str;
 
+var cpu_count: usize = undefined;
+const num_concurrent_repos = 2;
+
 pub fn main() !void {
+    cpu_count = std.Thread.getCpuCount() catch unreachable;
+
     // Init arena allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_alloc = gpa.allocator();
@@ -39,7 +44,7 @@ pub fn main() !void {
 
     // Write repo commits
     var thread_pool: std.Thread.Pool = undefined;
-    try thread_pool.init(.{ .allocator = arena_alloc });
+    try thread_pool.init(.{ .allocator = arena_alloc, .n_jobs = num_concurrent_repos });
     defer thread_pool.deinit();
     for (repos) |repo| {
         try thread_pool.spawn(processRepo, .{ repos_path, output_path, repo });
@@ -92,17 +97,32 @@ fn processRepo(
         error.PathAlreadyExists => {},
         else => unreachable,
     };
+    var thread_pool: std.Thread.Pool = undefined;
+    thread_pool.init(.{
+        .allocator = raa,
+        .n_jobs = @intCast(cpu_count / num_concurrent_repos),
+    }) catch unreachable;
+    defer thread_pool.deinit();
     for (commits) |commit| {
-        processCommit(raa, commits_dir_path, repo_path, &commit);
+        thread_pool.spawn(
+            processCommit,
+            .{ commits_dir_path, repo_path, &commit },
+        ) catch unreachable;
     }
 }
 
 fn processCommit(
-    aa: std.mem.Allocator,
     commits_dir_path: []const u8,
     repo_path: []const u8,
     commit: *const git.Commit,
 ) void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa_alloc = gpa.allocator();
+    defer if (gpa.deinit() == .leak) @panic("Memory leaked.");
+    var arena = ArenaAllocator.init(gpa_alloc);
+    defer arena.deinit();
+    const aa = arena.allocator();
+
     const file_path = concat(aa, u8, &.{
         commits_dir_path,
         path_sep,
