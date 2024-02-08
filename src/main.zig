@@ -93,20 +93,29 @@ fn processRepo(
         else => unreachable,
     };
     for (commits) |commit| {
-        const file_path = concat(raa, u8, &.{
-            commits_dir_path,
-            path_sep,
-            commit.hash,
-            ".html",
-        }) catch unreachable;
-        const file = std.fs.createFileAbsolute(file_path, .{}) catch unreachable;
-        defer file.close();
-
-        pages.writeCommit(
-            raa,
-            file,
-            repo_path,
-            commit,
-        ) catch unreachable;
+        processCommit(raa, commits_dir_path, repo_path, &commit);
     }
+}
+
+fn processCommit(
+    aa: std.mem.Allocator,
+    commits_dir_path: []const u8,
+    repo_path: []const u8,
+    commit: *const git.Commit,
+) void {
+    const file_path = concat(aa, u8, &.{
+        commits_dir_path,
+        path_sep,
+        commit.hash,
+        ".html",
+    }) catch unreachable;
+    const file = std.fs.createFileAbsolute(file_path, .{}) catch unreachable;
+    defer file.close();
+
+    pages.writeCommit(
+        aa,
+        file,
+        repo_path,
+        commit,
+    ) catch unreachable;
 }
