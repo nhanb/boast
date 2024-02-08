@@ -23,7 +23,7 @@ pub fn main() !void {
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
-    const repos_path = "/home/nhanb/pj/";
+    const repos_path = "/home/nhanb/all-repos";
     const output_path = "/home/nhanb/pj/boast/boast-out";
 
     fs.makeDirAbsolute(output_path) catch |err| switch (err) {
@@ -106,7 +106,7 @@ fn processRepo(
     for (commits) |commit| {
         thread_pool.spawn(
             processCommit,
-            .{ commits_dir_path, repo_path, &commit },
+            .{ commits_dir_path, repo_path, commit },
         ) catch unreachable;
     }
 }
@@ -114,7 +114,7 @@ fn processRepo(
 fn processCommit(
     commits_dir_path: []const u8,
     repo_path: []const u8,
-    commit: *const git.Commit,
+    commit: git.Commit,
 ) void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_alloc = gpa.allocator();

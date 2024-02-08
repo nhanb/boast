@@ -138,7 +138,7 @@ pub fn writeCommit(
     aa: Allocator,
     writer: anytype,
     repo_path: []const u8,
-    commit: *const git.Commit,
+    commit: git.Commit,
 ) !void {
     const text_diff = (try std.ChildProcess.run(.{
         .allocator = aa,
