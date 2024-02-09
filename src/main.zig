@@ -1,6 +1,7 @@
 const std = @import("std");
 const git = @import("./git.zig");
 const pages = @import("./pages.zig");
+const utils = @import("./utils.zig");
 
 const concat = std.mem.concat;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -108,8 +109,8 @@ fn processRepo(
 
         // Copy over just the necessary data:
         // - info/refs
-        // - objects/
         // - HEAD
+        // - objects/
 
         var src_repo_path = repo_path;
         if (!std.mem.endsWith(u8, repo_path, ".git")) {
@@ -119,30 +120,18 @@ fn processRepo(
         const src_dir = fs.openDirAbsolute(src_repo_path, .{ .iterate = true }) catch unreachable;
         const dest_dir = fs.openDirAbsolute(out_repo_path, .{ .iterate = true }) catch unreachable;
 
+        // info/refs
         dest_dir.makePath("info") catch unreachable;
-
         const refs_path = fs.path.join(raa, &.{ "info", "refs" }) catch unreachable;
         src_dir.copyFile(refs_path, dest_dir, refs_path, .{}) catch unreachable;
 
+        // HEAD
         src_dir.copyFile("HEAD", dest_dir, "HEAD", .{}) catch unreachable;
 
+        // objects/
         const src_objects_dir = src_dir.openDir("objects", .{ .iterate = true }) catch unreachable;
         const dest_objects_dir = dest_dir.makeOpenPath("objects", .{}) catch unreachable;
-
-        var walker = src_objects_dir.walk(raa) catch unreachable;
-        defer walker.deinit();
-
-        while (walker.next() catch unreachable) |entry| {
-            switch (entry.kind) {
-                .file => {
-                    entry.dir.copyFile(entry.basename, dest_objects_dir, entry.path, .{}) catch unreachable;
-                },
-                .directory => {
-                    dest_objects_dir.makePath(entry.path) catch unreachable;
-                },
-                else => unreachable,
-            }
-        }
+        utils.copyDir(raa, &src_objects_dir, &dest_objects_dir) catch unreachable;
     }
 
     // Create commit files
