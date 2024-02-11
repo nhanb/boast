@@ -145,13 +145,19 @@ pub const Builder = struct {
             };
         }
 
-        // Each item in the `children` tuple can be an Element, []Element, or string.
+        // Each item in the `children` tuple can be an Element, []Element, []Child, or string.
+        // This makes composition (read: templates) easier.
         var children_list = ArrayList(Child).init(self.allocator);
         inline for (children) |child| switch (@TypeOf(child)) {
             Element => children_list.append(.{ .elem = child }) catch unreachable,
             []Element => {
                 for (child) |c| {
                     children_list.append(.{ .elem = c }) catch unreachable;
+                }
+            },
+            []Child => {
+                for (child) |c| {
+                    children_list.append(c) catch unreachable;
                 }
             },
             else => children_list.append(.{ .text = @as([]const u8, child) }) catch unreachable,

@@ -7,6 +7,50 @@ const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 const ArrayList = std.ArrayList;
 
+const TemplateArgs = struct {
+    builder: html.Builder,
+    title: html.Element,
+    breadcrumbs: struct {
+        urls: []const struct {
+            href: []const u8,
+            text: []const u8,
+        } = &.{},
+        current: []const u8,
+    },
+    main: html.Element,
+};
+
+pub fn applyTemplate(args: TemplateArgs) html.Element {
+    const h = args.builder;
+    var breadcrumbs_anchors = ArrayList(html.Child).init(h.allocator);
+    for (args.breadcrumbs.urls) |url| {
+        breadcrumbs_anchors.append(.{ .elem = h.a(
+            .{ .href = url.href },
+            .{url.text},
+        ) }) catch unreachable;
+        breadcrumbs_anchors.append(.{ .text = " / " }) catch unreachable;
+    }
+
+    return h.html(
+        .{ .lang = "en", .style = "font-family: monospace;" },
+        .{
+            h.head(null, .{
+                args.title,
+                h.meta(.{ .charset = "utf-8" }),
+                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
+            }),
+            h.body(null, .{
+                h.b(null, .{
+                    breadcrumbs_anchors.items,
+                    args.breadcrumbs.current,
+                }),
+                h.hr(null),
+                args.main,
+            }),
+        },
+    );
+}
+
 pub fn writeIndex(
     aa: Allocator,
     writer: anytype,
@@ -24,21 +68,15 @@ pub fn writeIndex(
         );
     }
 
-    const document = h.html(
-        .{ .lang = "en", .style = "font-family: monospace;" },
-        .{
-            h.head(null, .{
-                h.title(null, .{"Boast Index"}),
-                h.meta(.{ .charset = "utf-8" }),
-                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
-            }),
-            h.body(null, .{
-                h.strong(null, .{"Repos"}),
-                h.hr(null),
-                h.ul(null, .{repo_lis.items}),
-            }),
+    const document = applyTemplate(.{
+        .builder = h,
+        .title = h.title(null, .{"Boast Index"}),
+        .breadcrumbs = .{
+            .current = "Repos",
         },
-    );
+        .main = h.ul(null, .{repo_lis.items}),
+    });
+
     try h.writeDoctype(&writer);
     try document.writeTo(&writer);
 }
@@ -65,36 +103,31 @@ pub fn writeRepoIndex(
         }));
     }
 
-    const document = h.html(
-        .{ .lang = "en", .style = "font-family: monospace;" },
-        .{
-            h.head(null, .{
-                h.title(null, .{ repo_name, " | Boast" }),
-                h.meta(.{ .charset = "utf-8" }),
-                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
-            }),
-            h.body(null, .{
-                h.strong(null, .{
-                    h.a(.{ .href = "../" }, .{"Repos"}),
-                    " / ",
-                    repo_name,
-                }),
-                h.hr(null),
-                h.p(null, .{
-                    "To clone this repo, run ",
-                    h.code(
-                        .{ .style = "background-color: gainsboro; padding: 4px;" },
-                        .{"git clone <this-url>"},
-                    ),
-                }),
-                h.p(null, .{
-                    h.b(null, .{try allocPrint(aa, "{d}", .{commits.len})}),
-                    " commits:",
-                }),
-                h.ul(null, .{commit_lis.items}),
-            }),
+    const document = applyTemplate(.{
+        .builder = h,
+        .title = h.title(null, .{ repo_name, " | Boast" }),
+        .breadcrumbs = .{
+            .urls = &.{
+                .{ .href = "../", .text = "Repos" },
+            },
+            .current = repo_name,
         },
-    );
+        .main = h.main(null, .{
+            h.p(null, .{
+                "To clone this repo, run ",
+                h.code(
+                    .{ .style = "background-color: gainsboro; padding: 4px;" },
+                    .{"git clone <this-url>"},
+                ),
+            }),
+            h.p(null, .{
+                h.b(null, .{try allocPrint(aa, "{d}", .{commits.len})}),
+                " commits:",
+            }),
+            h.ul(null, .{commit_lis.items}),
+        }),
+    });
+
     try h.writeDoctype(&writer);
     try document.writeTo(&writer);
 }
@@ -115,35 +148,27 @@ pub fn writeCommit(
     const repo_name = std.fs.path.basename(repo_path);
 
     var h = html.Builder{ .allocator = aa };
-    const document = h.html(
-        .{ .lang = "en", .style = "font-family: monospace;" },
-        .{
-            h.head(null, .{
-                h.title(null, .{
-                    "[",
-                    commit.hash[0..10],
-                    "] ",
-                    commit.subject,
-                    " | ",
-                    repo_name,
-                    " | Boast",
-                }),
-                h.meta(.{ .charset = "utf-8" }),
-                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
-            }),
-            h.body(null, .{
-                h.strong(null, .{
-                    h.a(.{ .href = "../.." }, .{"Repos"}),
-                    " / ",
-                    h.a(.{ .href = "../" }, .{repo_name}),
-                    " / ",
-                    commit.hash[0..10],
-                }),
-                h.hr(null),
-                h.pre(null, .{text_diff}),
-            }),
+
+    const document = applyTemplate(.{
+        .builder = h,
+        .title = h.title(null, .{
+            "[",
+            commit.hash[0..10],
+            "] ",
+            commit.subject,
+            " | ",
+            repo_name,
+            " | Boast",
+        }),
+        .breadcrumbs = .{
+            .urls = &.{
+                .{ .href = "../../", .text = "Repos" },
+                .{ .href = "../", .text = repo_name },
+            },
+            .current = commit.hash[0..10],
         },
-    );
+        .main = h.pre(null, .{text_diff}),
+    });
 
     try h.writeDoctype(&writer);
     try document.writeTo(&writer);
