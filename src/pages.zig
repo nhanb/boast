@@ -5,55 +5,42 @@ const git = @import("./git.zig");
 const concat = std.mem.concat;
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
+const ArrayList = std.ArrayList;
 
 pub fn writeIndex(
     aa: Allocator,
     writer: anytype,
     repos: [][]const u8,
 ) !void {
-    var h = html.Builder(@TypeOf(writer), true).init(aa, writer);
-    try h.doctype();
-    {
-        try h.open("html", .{ .lang = "en", .style = "font-family: monospace;" });
-        defer h.close();
-        {
-            try h.open("head", null);
-            defer h.close();
-            {
-                try h.open("title", null);
-                defer h.close();
-                try h.text("Boast Index");
-            }
-            try h.open("meta", .{ .charset = "utf-8" });
-            try h.open("meta", .{
-                .name = "viewport",
-                .content = "width=device-width, initial-scale=1.0",
-            });
-        }
-        {
-            try h.open("body", null);
-            defer h.close();
-            {
-                try h.open("strong", null);
-                defer h.close();
-                try h.text("Repos");
-            }
-            try h.open("hr", null);
-            {
-                try h.open("ul", null);
-                defer h.close();
-                for (repos) |repo| {
-                    try h.open("li", null);
-                    defer h.close();
-                    {
-                        try h.open("a", .{ .href = try concat(aa, u8, &.{ "./", repo, "/" }) });
-                        defer h.close();
-                        try h.text(repo);
-                    }
-                }
-            }
-        }
+    var h = html.Builder{ .allocator = aa };
+
+    var repo_lis = ArrayList(html.Element).init(aa);
+    for (repos) |repo| {
+        try repo_lis.append(
+            h.li(null, .{h.a(
+                .{ .href = try concat(aa, u8, &.{ "./", repo, "/" }) },
+                .{repo},
+            )}),
+        );
     }
+
+    const document = h.html(
+        .{ .lang = "en", .style = "font-family: monospace;" },
+        .{
+            h.head(null, .{
+                h.title(null, .{"Boast Index"}),
+                h.meta(.{ .charset = "utf-8" }),
+                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
+            }),
+            h.body(null, .{
+                h.strong(null, .{"Repos"}),
+                h.hr(null),
+                h.ul(null, .{repo_lis.items}),
+            }),
+        },
+    );
+    try h.writeDoctype(&writer);
+    try document.writeTo(&writer);
 }
 
 pub fn writeRepoIndex(
@@ -62,87 +49,54 @@ pub fn writeRepoIndex(
     repo_name: []const u8,
     commits: []git.Commit,
 ) !void {
-    var h = html.Builder(@TypeOf(writer), false).init(aa, writer);
-    try h.doctype();
-    {
-        try h.open("html", .{ .lang = "en", .style = "font-family: monospace;" });
-        defer h.close();
-        {
-            try h.open("head", null);
-            defer h.close();
-            {
-                try h.open("title", null);
-                defer h.close();
-                try h.text(repo_name);
-                try h.text(" | Boast");
-            }
-            try h.open("meta", .{ .charset = "utf-8" });
-            try h.open("meta", .{
-                .name = "viewport",
-                .content = "width=device-width, initial-scale=1.0",
-            });
-        }
-        {
-            try h.open("body", null);
-            defer h.close();
-            {
-                try h.open("strong", null);
-                defer h.close();
-                {
-                    try h.open("a", .{ .href = "../" });
-                    defer h.close();
-                    try h.text("Repos");
-                }
-                try h.text(" / ");
-                try h.text(repo_name);
-            }
+    var h = html.Builder{ .allocator = aa };
 
-            try h.open("hr", null);
-
-            {
-                try h.open("p", null);
-                defer h.close();
-                try h.text("To clone this repo, run ");
-                {
-                    try h.open("code", .{ .style = "background-color: gainsboro; padding: 4px;" });
-                    defer h.close();
-                    try h.text("git clone <this-url>");
-                }
-            }
-
-            {
-                try h.open("p", null);
-                defer h.close();
-                {
-                    try h.open("b", null);
-                    defer h.close();
-                    try h.text(try allocPrint(aa, "{d}", .{commits.len}));
-                }
-                try h.text(" commits:");
-            }
-
-            {
-                try h.open("ul", null);
-                defer h.close();
-                for (commits) |commit| {
-                    try h.open("li", null);
-                    defer h.close();
-                    try h.text(commit.hash[0..10]);
-                    try h.text(" | ");
-                    try h.text(commit.date);
-                    try h.text(" | ");
-                    {
-                        try h.open(
-                            "a",
-                            .{ .href = try concat(aa, u8, &.{ "commits/", commit.hash, ".html" }) },
-                        );
-                        defer h.close();
-                        try h.text(commit.subject);
-                    }
-                }
-            }
-        }
+    var commit_lis = ArrayList(html.Element).init(aa);
+    for (commits) |commit| {
+        try commit_lis.append(h.li(null, .{
+            commit.hash[0..10],
+            " | ",
+            commit.date,
+            " | ",
+            h.a(
+                .{ .href = try concat(aa, u8, &.{ "commits/", commit.hash, ".html" }) },
+                .{commit.subject},
+            ),
+        }));
     }
+
+    const document = h.html(
+        .{ .lang = "en", .style = "font-family: monospace;" },
+        .{
+            h.head(null, .{
+                h.title(null, .{ repo_name, " | Boast" }),
+                h.meta(.{ .charset = "utf-8" }),
+                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
+            }),
+            h.body(null, .{
+                h.strong(null, .{
+                    h.a(.{ .href = "../" }, .{"Repos"}),
+                    " / ",
+                    repo_name,
+                }),
+                h.hr(null),
+                h.p(null, .{
+                    "To clone this repo, run ",
+                    h.code(
+                        .{ .style = "background-color: gainsboro; padding: 4px;" },
+                        .{"git clone <this-url>"},
+                    ),
+                }),
+                h.p(null, .{
+                    h.b(null, .{try allocPrint(aa, "{d}", .{commits.len})}),
+                    " commits:",
+                }),
+                h.ul(null, .{commit_lis.items}),
+            }),
+        },
+    );
+    try h.writeDoctype(&writer);
+    try document.writeTo(&writer);
 }
 
 pub fn writeCommit(
@@ -160,59 +114,37 @@ pub fn writeCommit(
 
     const repo_name = std.fs.path.basename(repo_path);
 
-    var h = html.Builder(@TypeOf(writer), false).init(aa, writer);
-    try h.doctype();
-    {
-        try h.open("html", .{ .lang = "en", .style = "font-family: monospace;" });
-        defer h.close();
-        {
-            try h.open("head", null);
-            defer h.close();
-            {
-                try h.open("title", null);
-                defer h.close();
-                try h.text("[");
-                try h.text(commit.hash[0..10]);
-                try h.text("] ");
-                try h.text(commit.subject);
-                try h.text(" | ");
-                try h.text(repo_name);
-                try h.text(" | Boast");
-            }
-            try h.open("meta", .{ .charset = "utf-8" });
-            try h.open("meta", .{
-                .name = "viewport",
-                .content = "width=device-width, initial-scale=1.0",
-            });
-        }
-        {
-            try h.open("body", null);
-            defer h.close();
-            {
-                try h.open("strong", null);
-                defer h.close();
-                {
-                    try h.open("a", .{ .href = "../../" });
-                    defer h.close();
-                    try h.text("Repos");
-                }
-                try h.text(" / ");
-                {
-                    try h.open("a", .{ .href = "../" });
-                    defer h.close();
-                    try h.text(repo_name);
-                }
-                try h.text(" / ");
-                try h.text(commit.hash[0..10]);
-            }
+    var h = html.Builder{ .allocator = aa };
+    const document = h.html(
+        .{ .lang = "en", .style = "font-family: monospace;" },
+        .{
+            h.head(null, .{
+                h.title(null, .{
+                    "[",
+                    commit.hash[0..10],
+                    "] ",
+                    commit.subject,
+                    " | ",
+                    repo_name,
+                    " | Boast",
+                }),
+                h.meta(.{ .charset = "utf-8" }),
+                h.meta(.{ .name = "viewport", .content = "width=device-width, initial-scale=1.0" }),
+            }),
+            h.body(null, .{
+                h.strong(null, .{
+                    h.a(.{ .href = "../.." }, .{"Repos"}),
+                    " / ",
+                    h.a(.{ .href = "../" }, .{repo_name}),
+                    " / ",
+                    commit.hash[0..10],
+                }),
+                h.hr(null),
+                h.pre(null, .{text_diff}),
+            }),
+        },
+    );
 
-            try h.open("hr", null);
-
-            {
-                try h.open("pre", null);
-                defer h.close();
-                try h.text(text_diff);
-            }
-        }
-    }
+    try h.writeDoctype(&writer);
+    try document.writeTo(&writer);
 }
