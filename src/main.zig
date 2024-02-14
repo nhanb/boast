@@ -143,7 +143,7 @@ fn processRepo(
     var thread_pool: std.Thread.Pool = undefined;
     thread_pool.init(.{
         .allocator = raa,
-        .n_jobs = @intCast(cpu_count / num_concurrent_repos),
+        .n_jobs = @intCast(@max(1, cpu_count / num_concurrent_repos)),
     }) catch unreachable;
     defer thread_pool.deinit();
     for (commits) |commit| {
